@@ -3,14 +3,15 @@ import { Form, Input, Button, Typography } from "antd";
 import { instance } from "../config/axios-instance";
 import { useAuthStore } from "../store/useAuthStore";
 import { useNavigate } from "react-router-dom";
+import Cookies from "js-cookie";
 
 const { Title } = Typography;
 
 export default function Login() {
-  const { setToken } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
   const navigate = useNavigate();
+  const { setUser, setToken } = useAuthStore((store) => store);
 
   const onFinish = async (values) => {
     setLoading(true);
@@ -19,15 +20,28 @@ export default function Login() {
         username: values.username,
         password: values.password,
       });
-      const token = res.data?.data?.access_token;
-      if (token) {
-        setToken(token);
-        localStorage.setItem("auth", JSON.stringify({ state: { token } }));
-        // window.location.href = "/dashboard";
-        navigate("/dashboard", { replace: true });
+      const accessToken = res.data?.data?.access_token;
+      const role = res?.data?.data?.role;
+
+      if (!["ADMIN", "OPERATOR"].includes(role)) {
+        throw new Error("Access Denied for " + role);
       }
-    } catch (err) {
-      setApiError(err.response?.data?.message);
+
+      setUser({
+        username: res.data?.data?.username,
+        role: role,
+      });
+      setToken(accessToken);
+
+      Cookies.set("accessToken", accessToken);
+
+      return navigate("/dashboard", { replace: true });
+    } catch (error) {
+      if (!error.message.startsWith("Access Denied"))
+        setApiError("Username yoki parol noto'g'ri! Qayta urinib ko'ring!");
+      else if (!error.message.includes("not found")) {
+        setApiError("Bunday user mavjud emas");
+      } else setApiError(error.message);
     } finally {
       setLoading(false);
     }

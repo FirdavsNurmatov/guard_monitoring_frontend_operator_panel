@@ -37,7 +37,7 @@ export default function Dashboard() {
       // Logs
       const limit = data?.length ? data.length : 10;
 
-      const logRes = await instance.get(`/admin/logs/${id}?limit=${limit}`);
+      const logRes = await instance.get(`/admin/logs?limit=${limit}`);
       const logsData = logRes.data?.data || [];
       const formattedLogs = logsData.map((log) => ({
         id: log.id,
@@ -73,7 +73,6 @@ export default function Dashboard() {
         });
       setGuards(Array.from(guardMap.values()));
     } catch (err) {
-      console.error(err);
       message.error("Mapni yoki loglarni yuklab bo‘lmadi");
     } finally {
       setLoadingSelected(false);
@@ -86,7 +85,7 @@ export default function Dashboard() {
 
       if (!id) {
         setLoadingSelected(false);
-        message.warning("Ma'lumot topilmadi");
+        message.warning("Ma'lumot topilmadi yoki hali yaratilmagan");
         return;
       }
 
@@ -144,7 +143,9 @@ export default function Dashboard() {
 
   if (!selectedMap) {
     return (
-      <div className="p-8 text-center text-gray-700">Ma'lumot topilmadi</div>
+      <div className="p-8 text-center text-gray-700">
+        Ma'lumot topilmadi yoki hali yaratilmagan
+      </div>
     );
   }
 

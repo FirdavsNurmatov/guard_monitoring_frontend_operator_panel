@@ -15,6 +15,13 @@ function App() {
           </RoleChecker>
         }
       />
+
+      <Route
+        path="/*"
+        element={
+          <h1 className="text-[red] text-3xl text-center">Page not found!</h1>
+        }
+      ></Route>
     </Routes>
   );
 }

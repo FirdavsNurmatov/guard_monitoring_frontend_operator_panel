@@ -35,7 +35,7 @@ export default function Login() {
 
       Cookies.set("accessToken", accessToken);
 
-      return navigate("/dashboard", { replace: true });
+      return navigate("/monitoring", { replace: true });
     } catch (error) {
       if (!error.message.startsWith("Access Denied"))
         setApiError("Username yoki parol noto'g'ri! Qayta urinib ko'ring!");
@@ -48,12 +48,19 @@ export default function Login() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen ">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
       <Form
         name="login"
         onFinish={onFinish}
-        className=" p-10 rounded-xl  w-full max-w-sm"
         layout="vertical"
+        style={{
+          backgroundColor: "white",
+          width: "100%",
+          boxShadow: "initial",
+          padding: "2rem",
+          borderRadius: "12px",
+          maxWidth: "28rem",
+        }}
       >
         <Title level={2} className="text-center mb-8 !text-3xl">
           Login

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Typography, Spin, message, Table, Button, Modal } from "antd";
 import { instance } from "../config/axios-instance";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useAuthStore } from "../store/useAuthStore";
 
 const { Title } = Typography;
 
@@ -14,9 +15,11 @@ export default function Dashboard() {
   const [guards, setGuards] = useState([]);
   const [logs, setLogs] = useState([]);
   const [showTables, setShowTables] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuthStore((store) => store);
 
   const intervalRef = useRef(null);
-  const [now, setNow] = useState(new Date()); // ⏱ hozirgi vaqt
+  const [now, setNow] = useState(new Date());
 
   const getFirstMap = async () => {
     const resFirst = await instance.get(`/admin/first-object`);
@@ -143,9 +146,21 @@ export default function Dashboard() {
 
   if (!selectedMap) {
     return (
-      <div className="p-8 text-center text-gray-700">
-        Ma'lumot topilmadi yoki hali yaratilmagan
-      </div>
+      <>
+        <div className="p-8 text-center text-gray-700">
+          Ma'lumot topilmadi yoki hali yaratilmagan
+        </div>
+        {user && user.role && user.role == "ADMIN" && (
+          <div className="text-center">
+            <button
+              onClick={() => navigate("/admin")}
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Admin panel
+            </button>
+          </div>
+        )}
+      </>
     );
   }
 

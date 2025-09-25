@@ -1,5 +1,9 @@
 import { Layout, Menu } from "antd";
-import { DashboardOutlined } from "@ant-design/icons";
+import {
+  DashboardOutlined,
+  TagsOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 const { Sider, Content } = Layout;
@@ -8,7 +12,8 @@ export default function MainLayout() {
   const location = useLocation();
 
   const selectedKey = (() => {
-    if (location.pathname.startsWith("/dashboard")) return "1";
+    if (location.pathname.startsWith("/admin/object")) return "1";
+    if (location.pathname.startsWith("/admin/users")) return "2";
     return "";
   })();
 
@@ -22,8 +27,18 @@ export default function MainLayout() {
           items={[
             {
               key: "1",
+              icon: <TagsOutlined />,
+              label: <Link to="/admin/object">Change map image</Link>,
+            },
+            {
+              key: "2",
+              icon: <UserOutlined />,
+              label: <Link to="/admin/users">Users</Link>,
+            },
+            {
+              key: "3",
               icon: <DashboardOutlined />,
-              label: <Link to="/dashboard">Dashboard</Link>,
+              label: <Link to="/monitoring">Monitoring</Link>,
             },
           ]}
         />

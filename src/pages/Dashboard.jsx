@@ -3,6 +3,7 @@ import { Typography, Spin, message, Table, Button, Modal } from "antd";
 import { instance } from "../config/axios-instance";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
+import { socket } from "../config/socket";
 
 const { Title } = Typography;
 
@@ -18,7 +19,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore((store) => store);
 
-  const intervalRef = useRef(null);
   const [now, setNow] = useState(new Date());
 
   const getFirstMap = async () => {
@@ -30,55 +30,65 @@ export default function Dashboard() {
     try {
       const res = await instance.get(`/admin/object/${id}`);
       const { data } = await instance.get("/admin/checkpoints");
+
       const m = {
         ...res.data,
         checkpoints: data?.res,
         imageUrl: `${baseUrl}${res.data.imageUrl}`,
       };
+
       setSelectedMap(m);
+    } catch (err) {
+      message.error("Mapni yuklab bo‘lmadi");
+    } finally {
+      setLoadingSelected(false);
+    }
+  };
 
-      // Logs
-      const limit = data?.length ? data.length : 10;
+  const fetchInitialLogs = async () => {
+    try {
+      const quantity = selectedMap?.checkpoints.length;
+      
+      const res = await instance.get(`/admin/logs?limit=${quantity || 10}`); // 🔹 API'da limitni qo‘yib olish kerak
+      const data = res?.data?.data || [];
 
-      const logRes = await instance.get(`/admin/logs?limit=${limit}`);
-      const logsData = logRes.data?.data || [];
-      const formattedLogs = logsData.map((log) => ({
+      const formattedLogs = data.map((log) => ({
         id: log.id,
-        guard: log.user.username,
-        checkpoint: log.checkpoint.name,
+        guard: log.user?.username || "Unknown",
+        checkpoint: log.checkpoint?.name || "-",
         status: log.status,
         createdAt: new Date(log.createdAt).toLocaleTimeString(),
         createdAtRaw: new Date(log.createdAt),
-        zoneId: log.checkpoint.id,
+        zoneId: log.checkpoint?.id,
         userId: log.userId,
-        xPercent: log.checkpoint.xPercent,
-        yPercent: log.checkpoint.yPercent,
+        xPercent: log.checkpoint?.xPercent,
+        yPercent: log.checkpoint?.yPercent,
       }));
 
       setLogs(formattedLogs);
 
-      // Guards (oxirgi log bo‘yicha)
-      const guardMap = new Map();
-      formattedLogs
-        .sort((a, b) => b.createdAtRaw - a.createdAtRaw)
-        .forEach((log) => {
-          if (!guardMap.has(log.userId)) {
-            guardMap.set(log.userId, {
-              guardId: log.userId,
-              username: log.guard,
-              xPercent: log.xPercent,
-              yPercent: log.yPercent,
-              checkpointName: log.checkpoint,
-              status: log.status,
-              zoneId: log.zoneId,
-            });
-          }
-        });
-      setGuards(Array.from(guardMap.values()));
+      // 🔹 Guards ni ham logsdan yig‘ib olish
+      const formattedGuards = [];
+      data.forEach((log) => {
+        if (!log.userId) return;
+
+        const exists = formattedGuards.find((g) => g.guardId === log.userId);
+        if (!exists) {
+          formattedGuards.push({
+            guardId: log.userId,
+            username: log.user?.username,
+            xPercent: log.checkpoint?.xPercent,
+            yPercent: log.checkpoint?.yPercent,
+            checkpointName: log.checkpoint?.name,
+            status: log.status,
+            zoneId: log.checkpoint?.id,
+          });
+        }
+      });
+
+      setGuards(formattedGuards);
     } catch (err) {
-      message.error("Mapni yoki loglarni yuklab bo‘lmadi");
-    } finally {
-      setLoadingSelected(false);
+      message.error("Dastlabki loglarni olishda xatolik");
     }
   };
 
@@ -92,24 +102,78 @@ export default function Dashboard() {
         return;
       }
 
-      let counter = 0;
+      await handleSelectMap(id);
 
-      intervalRef.current = setInterval(() => {
-        setNow(new Date()); // ⏱ soatni yangilash
+      // ⏰ vaqtni update qilish
+      const timer = setInterval(() => setNow(new Date()), 1000);
 
-        counter++;
-        if (counter % 2 === 0) {
-          handleSelectMap(id); // har 2 sekundda fetch
+      let socketReceived = false;
+
+      socket.on("logs", (log) => {
+        socketReceived = true;
+
+        const formattedLog = {
+          id: log.id,
+          guard: log.user?.username || "Unknown",
+          checkpoint: log.checkpoint?.name || "-",
+          status: log.status,
+          createdAt: new Date(log.createdAt).toLocaleTimeString(),
+          createdAtRaw: new Date(log.createdAt),
+          zoneId: log.checkpoint?.id,
+          userId: log.userId,
+          xPercent: log.checkpoint?.xPercent,
+          yPercent: log.checkpoint?.yPercent,
+        };
+
+        // logs update
+        setLogs((prev) => {
+          const newLogs = [formattedLog, ...prev];
+          return newLogs.slice(0, 50);
+        });
+
+        // guards update
+        setGuards((prev) => {
+          const copy = [...prev];
+          const index = copy.findIndex((g) => g.guardId === log.userId);
+          if (index >= 0) {
+            copy[index] = {
+              guardId: log.userId,
+              username: log.user?.username,
+              xPercent: log.checkpoint?.xPercent,
+              yPercent: log.checkpoint?.yPercent,
+              checkpointName: log.checkpoint?.name,
+              status: log.status,
+              zoneId: log.checkpoint?.id,
+            };
+          } else {
+            copy.push({
+              guardId: log.userId,
+              username: log.user?.username,
+              xPercent: log.checkpoint?.xPercent,
+              yPercent: log.checkpoint?.yPercent,
+              checkpointName: log.checkpoint?.name,
+              status: log.status,
+              zoneId: log.checkpoint?.id,
+            });
+          }
+          return copy;
+        });
+      });
+
+      setTimeout(async () => {
+        if (!socketReceived) {
+          await fetchInitialLogs();
         }
       }, 1000);
+
+      return () => {
+        clearInterval(timer);
+        socket.off("logs");
+      };
     };
 
     init();
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [mapId]);
+  }, []);
 
   const guardColumns = [
     { title: "Guard", dataIndex: "username", key: "username" },
@@ -172,15 +236,24 @@ export default function Dashboard() {
             {selectedMap.name}
           </Title>
           <div className="flex gap-1 items-center">
-            {new Date().toLocaleTimeString("uz-UZ", {
+            {now.toLocaleTimeString("uz-UZ", {
               day: "numeric",
               month: "numeric",
               year: "numeric",
               hour: "2-digit",
               minute: "2-digit",
             })}
-            <br />
           </div>
+          {user && user.role && user.role == "ADMIN" && (
+            <div className="text-center">
+              <button
+                onClick={() => navigate("/admin")}
+                className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Admin panel
+              </button>
+            </div>
+          )}
         </div>
         <Button onClick={() => setShowTables(true)}>Show Details</Button>
         <Modal
@@ -194,7 +267,7 @@ export default function Dashboard() {
             <div className="border rounded-xl p-4">
               <Title level={4}>Latest Logs</Title>
               <Table
-                dataSource={logs.map((l) => ({ ...l, key: l.id }))}
+                dataSource={logs.map((l, index) => ({ ...l, key: index }))}
                 columns={logColumns}
                 pagination={false}
                 scroll={{ y: 400, x: true }}
@@ -203,7 +276,10 @@ export default function Dashboard() {
             <div className="border rounded-xl p-4">
               <Title level={4}>Guards</Title>
               <Table
-                dataSource={guards.map((g) => ({ ...g, key: g.guardId }))}
+                dataSource={guards.map((g, index) => ({
+                  ...g,
+                  key: index,
+                }))}
                 columns={guardColumns}
                 pagination={false}
                 scroll={{ y: 200, x: true }}
@@ -235,7 +311,6 @@ export default function Dashboard() {
             ? statusColors[latestLog.status] || "bg-gray-400"
             : "bg-gray-400";
 
-          // ✅ Har bir checkpoint uchun alohida timer
           let timeDiff = null;
           if (latestLog) {
             const now = Date.now();

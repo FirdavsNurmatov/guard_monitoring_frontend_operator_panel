@@ -140,6 +140,7 @@ export default function Dashboard() {
           if (index >= 0) {
             copy[index] = {
               guardId: log.userId,
+              login: log.user?.login,
               username: log.user?.username,
               xPercent: log.checkpoint?.xPercent,
               yPercent: log.checkpoint?.yPercent,
@@ -150,6 +151,7 @@ export default function Dashboard() {
           } else {
             copy.push({
               guardId: log.userId,
+              login: log.user?.login,
               username: log.user?.username,
               xPercent: log.checkpoint?.xPercent,
               yPercent: log.checkpoint?.yPercent,

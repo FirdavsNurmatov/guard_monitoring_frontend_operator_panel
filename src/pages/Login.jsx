@@ -71,10 +71,10 @@ export default function Login() {
           name="login"
           rules={[
             { required: true, message: "Please input your username!" },
-            { min: 2, message: "Username must be minimum 2 characters" },
+            { min: 2, message: "Login must be minimum 2 characters" },
           ]}
         >
-          <Input size="large" placeholder="Username" className="text-base" />
+          <Input size="large" placeholder="Login" className="text-base" />
         </Form.Item>
 
         <Form.Item

@@ -4,15 +4,14 @@ import {
   Upload,
   Input,
   InputNumber,
-  message,
   Modal,
   Table,
   Space,
   Popconfirm,
-  notification,
 } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import { instance } from "../../config/axios-instance";
+import toast from "react-hot-toast";
 
 const Objects = () => {
   const [objects, setObjects] = useState([]);
@@ -27,13 +26,14 @@ const Objects = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   const fetchObjects = async () => {
     try {
       const res = await instance.get("/admin/objects");
       setObjects(res.data);
     } catch (err) {
-      console.error(err);
+      toast.error("Failed to fetch object ❌");
     } finally {
       setLoading(false);
     }
@@ -54,8 +54,7 @@ const Objects = () => {
       if (type === "view") setIsViewModalOpen(true);
       if (type === "edit") setIsEditModalOpen(true);
     } catch (err) {
-      console.error(err?.response?.data);
-      message.error("Failed to fetch map details ❌");
+      toast.error("Failed to fetch object details ❌");
     }
   };
 
@@ -104,18 +103,17 @@ const Objects = () => {
       );
 
       if (duplicates.length > 0) {
-        notification.warning({
-          message: "Duplicate Card Number",
-          description: `❌ Bu card_number allaqachon mavjud: ${duplicates[0]}`,
-          placement: "topRight", // ekranning qayerida chiqishini belgilash mumkin
-        });
+        toast.error(
+          `❌ Bunday card_number allaqachon mavjud: ${duplicates[0]}`
+        );
+        setApiError("Duplicate checkpoint card number");
         return;
       }
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", objectName || `Map-${Date.now()}`);
 
-      const res = await instance.post("/admin/object", formData, {
+      await instance.post("/admin/object", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
@@ -123,25 +121,23 @@ const Objects = () => {
         await instance.post("/admin/checkpoints", cp);
       }
 
-      message.success("Map created successfully ✅");
+      toast.success("Map created successfully ✅");
       fetchObjects();
       setIsCreateModalOpen(false);
     } catch (err) {
-      notification.error({
-        message: "Xatolik",
-        description: "❌ Failed to create map",
-      });
+      if (err?.response?.data?.message.includes("Duplicate"))
+        setApiError("Duplicate checkpoint card number");
+      toast.error("❌ Failed to create object");
     }
   };
 
   const handleDelete = async (id) => {
     try {
       await instance.delete(`/admin/object/${id}`);
-      message.success("Map deleted ✅");
+      toast.success("Object deleted ✅");
       fetchObjects();
     } catch (err) {
-      console.error(err);
-      message.error("Failed to delete map ❌");
+      toast.error("Failed to delete object ❌");
     }
   };
 
@@ -158,12 +154,14 @@ const Objects = () => {
         }
       }
 
-      message.success("Map updated ✅");
+      toast.success("Object updated ✅");
       setIsEditModalOpen(false);
       fetchObjects();
     } catch (err) {
-      console.error(err?.response?.data);
-      message.error("Failed to update map ❌");
+      if (err?.response?.data?.message.includes("Duplicate")) {
+        setApiError("Duplicate checkpoint card number");
+        toast.error("Ikkita bir xil card number mavjud ❌");
+      } else toast.error("Failed to update object ❌");
     }
   };
 
@@ -196,11 +194,10 @@ const Objects = () => {
   const handleDeleteCheckpoint = async (id) => {
     try {
       await instance.delete(`/admin/checkpoints/${id}`);
-      message.success("Checkpoint deleted ✅");
+      toast.success("Checkpoint deleted ✅");
       setCheckpoints(checkpoints.filter((cp) => cp.id !== id));
     } catch (err) {
-      console.error(err?.response?.data);
-      message.error("Failed to delete checkpoint ❌");
+      toast.error("Failed to delete checkpoint ❌");
     }
   };
 
@@ -313,6 +310,8 @@ const Objects = () => {
             ))}
           </div>
         )}
+
+        {apiError && <p className="text-[red] text-2xl">{apiError}</p>}
 
         {checkpoints.length > 0 && (
           <div className="mt-4 space-y-2">
@@ -440,6 +439,8 @@ const Objects = () => {
             ))}
           </div>
         )}
+
+        {apiError && <p className="text-[red] text-2xl">{apiError}</p>}
 
         {checkpoints.length > 0 && (
           <div className="mt-6 space-y-3">

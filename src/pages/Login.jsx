@@ -17,7 +17,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await instance.post("/auth/login", {
-        username: values.username,
+        login: values.login,
         password: values.password,
       });
       const accessToken = res.data?.data?.access_token;
@@ -67,8 +67,8 @@ export default function Login() {
         </Title>
 
         <Form.Item
-          label={<span className="text-lg font-medium">Username</span>}
-          name="username"
+          label={<span className="text-lg font-medium">Login</span>}
+          name="login"
           rules={[
             { required: true, message: "Please input your username!" },
             { min: 2, message: "Username must be minimum 2 characters" },

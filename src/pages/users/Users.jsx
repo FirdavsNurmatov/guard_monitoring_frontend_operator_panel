@@ -9,8 +9,8 @@ import {
   Select,
   Space,
   Table,
-  message,
 } from "antd";
+import toast from "react-hot-toast";
 
 const Users = () => {
   const [data, setData] = useState(null);
@@ -30,7 +30,7 @@ const Users = () => {
         setData(res.data);
         setLoading(false);
       } catch (error) {
-        console.log("Error", error.response?.data);
+        toast.error("Failed to fetch users");
       }
     };
     getUsers();
@@ -39,42 +39,40 @@ const Users = () => {
   const handleDelete = async (id) => {
     try {
       await instance.delete("/admin/guards/" + id);
-      message.success("User deleted successfully");
+      toast.success("User deleted successfully");
       setLoading(true);
     } catch (error) {
-      console.log(error.response?.data);
-      message.error("Error deleting user");
+      toast.error("Error deleting user");
     }
   };
 
   const handleCreate = async (values) => {
     try {
       await instance.post("/admin/guards", values);
-      message.success("User created successfully");
+      toast.success("User created successfully");
       setIsFormModalOpen(false);
       form.resetFields();
       setLoading(true);
     } catch (error) {
-      console.log(error.response?.data);
-      message.error("Error creating user");
+      toast.error("Error creating user");
     }
   };
 
   const handleEdit = async (values) => {
     try {
       await instance.patch("/admin/guards/" + selected.id, values);
-      message.success("User updated successfully");
+      toast.success("User updated successfully");
       setIsFormModalOpen(false);
       form.resetFields();
       setLoading(true);
     } catch (error) {
-      console.log(error.response?.data);
-      message.error("Error updating user");
+      toast.error("Error updating user");
     }
   };
 
   const userColumns = [
     { title: "ID", dataIndex: "id" },
+    { title: "Login", dataIndex: "login" },
     { title: "Username", dataIndex: "username" },
     { title: "Role", dataIndex: "role" },
     {
@@ -160,6 +158,9 @@ const Users = () => {
       >
         {selected && (
           <Descriptions bordered column={1}>
+            <Descriptions.Item label="Login">
+              {selected.login}
+            </Descriptions.Item>
             <Descriptions.Item label="Username">
               {selected.username}
             </Descriptions.Item>
@@ -193,10 +194,13 @@ const Users = () => {
           }
         >
           <Form.Item
-            label="Username"
-            name="username"
-            rules={[{ required: true, message: "Please enter username" }]}
+            label="Login"
+            name="login"
+            rules={[{ required: true, message: "Please enter login" }]}
           >
+            <Input />
+          </Form.Item>
+          <Form.Item label="Username" name="username">
             <Input />
           </Form.Item>
           {formMode == "create" ? (

@@ -4,6 +4,7 @@ import { instance } from "../config/axios-instance";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { socket } from "../config/socket";
+import toast from "react-hot-toast";
 
 const { Title } = Typography;
 
@@ -39,7 +40,7 @@ export default function Dashboard() {
 
       setSelectedMap(m);
     } catch (err) {
-      message.error("Mapni yuklab bo‘lmadi");
+      toast.error("Mapni yuklab bo‘lmadi");
     } finally {
       setLoadingSelected(false);
     }
@@ -48,13 +49,13 @@ export default function Dashboard() {
   const fetchInitialLogs = async () => {
     try {
       const quantity = selectedMap?.checkpoints.length;
-      
+
       const res = await instance.get(`/admin/logs?limit=${quantity || 10}`); // 🔹 API'da limitni qo‘yib olish kerak
       const data = res?.data?.data || [];
 
       const formattedLogs = data.map((log) => ({
         id: log.id,
-        guard: log.user?.username || "Unknown",
+        guard: log.user?.login || "Unknown",
         checkpoint: log.checkpoint?.name || "-",
         status: log.status,
         createdAt: new Date(log.createdAt).toLocaleTimeString(),
@@ -76,6 +77,7 @@ export default function Dashboard() {
         if (!exists) {
           formattedGuards.push({
             guardId: log.userId,
+            login: log.user?.login,
             username: log.user?.username,
             xPercent: log.checkpoint?.xPercent,
             yPercent: log.checkpoint?.yPercent,
@@ -88,7 +90,7 @@ export default function Dashboard() {
 
       setGuards(formattedGuards);
     } catch (err) {
-      message.error("Dastlabki loglarni olishda xatolik");
+      toast.error("Dastlabki loglarni olishda xatolik");
     }
   };
 
@@ -98,7 +100,7 @@ export default function Dashboard() {
 
       if (!id) {
         setLoadingSelected(false);
-        message.warning("Ma'lumot topilmadi yoki hali yaratilmagan");
+        toast.error("Ma'lumot topilmadi yoki hali yaratilmagan");
         return;
       }
 
@@ -176,13 +178,14 @@ export default function Dashboard() {
   }, []);
 
   const guardColumns = [
-    { title: "Guard", dataIndex: "username", key: "username" },
+    { title: "Login", dataIndex: "login", key: "login" },
+    { title: "Username", dataIndex: "username", key: "username" },
     { title: "Checkpoint", dataIndex: "checkpointName", key: "checkpointName" },
     { title: "Status", dataIndex: "status", key: "status" },
   ];
 
   const logColumns = [
-    { title: "Guard", dataIndex: "guard", key: "guard" },
+    { title: "Guard login", dataIndex: "guard", key: "guard" },
     { title: "Checkpoint", dataIndex: "checkpoint", key: "checkpoint" },
     { title: "Status", dataIndex: "status", key: "status" },
     {

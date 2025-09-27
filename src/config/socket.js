@@ -5,9 +5,9 @@ export const socket = io(import.meta.env.VITE_SERVER_PORT, {
 });
 
 socket.on("connect", () => {
-  console.log("✅ Connected:", socket.id);
+  console.log("✅ Connected");
 });
 
 socket.on("connect_error", (err) => {
-  console.error("❌ Connection error:", err.message);
+  console.error("❌ Connection error");
 });

@@ -124,6 +124,7 @@ const Objects = () => {
       toast.success("Map created successfully ✅");
       fetchObjects();
       setIsCreateModalOpen(false);
+      setApiError("");
     } catch (err) {
       if (err?.response?.data?.message.includes("Duplicate"))
         setApiError("Duplicate checkpoint card number");
@@ -174,6 +175,7 @@ const Objects = () => {
       toast.success("Object updated ✅");
       setIsEditModalOpen(false);
       fetchObjects();
+      setApiError("");
     } catch (err) {
       if (err?.response?.data?.message.includes("Duplicate")) {
         setApiError("Duplicate checkpoint card number");

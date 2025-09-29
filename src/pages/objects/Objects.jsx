@@ -143,6 +143,23 @@ const Objects = () => {
 
   const handleUpdate = async () => {
     try {
+      // 🔎 Duplicate card_number check
+      const cardNumbers = checkpoints
+        .map((cp) => cp.card_number)
+        .filter(Boolean); // faqat to'ldirilganlarni olamiz
+      const duplicates = cardNumbers.filter(
+        (cn, idx) => cardNumbers.indexOf(cn) !== idx
+      );
+
+      if (duplicates.length > 0) {
+        toast.error(
+          `❌ Bunday card_number allaqachon mavjud: ${duplicates[0]}`
+        );
+        setApiError(`Duplicate checkpoint card number: ${duplicates[0]}`);
+        return;
+      }
+
+      // 🔄 Object update
       await instance.patch(`/admin/object/${objectId}`, { name: objectName });
 
       for (const cp of checkpoints) {
@@ -161,7 +178,9 @@ const Objects = () => {
       if (err?.response?.data?.message.includes("Duplicate")) {
         setApiError("Duplicate checkpoint card number");
         toast.error("Ikkita bir xil card number mavjud ❌");
-      } else toast.error("Failed to update object ❌");
+      } else {
+        toast.error("Failed to update object ❌");
+      }
     }
   };
 

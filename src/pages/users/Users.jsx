@@ -227,18 +227,27 @@ const Users = () => {
               </Form.Item>
             </>
           ) : (
-            <Form.Item
-              label="Status"
-              name="status"
-              rules={[{ required: true, message: "Please select status" }]}
-            >
-              <Select
-                options={[
-                  { label: "Active", value: "ACTIVE" },
-                  { label: "Inactive", value: "INACTIVE" },
-                ]}
-              />
-            </Form.Item>
+            <>
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[{ required: false }]} // edit paytida optional
+              >
+                <Input.Password placeholder="Leave empty to keep current password" />
+              </Form.Item>
+              <Form.Item
+                label="Status"
+                name="status"
+                rules={[{ required: true, message: "Please select status" }]}
+              >
+                <Select
+                  options={[
+                    { label: "Active", value: "ACTIVE" },
+                    { label: "Inactive", value: "INACTIVE" },
+                  ]}
+                />
+              </Form.Item>
+            </>
           )}
           <Form.Item>
             <Button type="primary" htmlType="submit" block>

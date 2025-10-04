@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { Typography, Spin, message, Table, Button, Modal } from "antd";
+import { useEffect, useState } from "react";
+import { Typography, Spin, Table, Button, Modal } from "antd";
 import { instance } from "../config/axios-instance";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { socket } from "../config/socket";
 import toast from "react-hot-toast";
+import Noty from "noty";
+import "noty/lib/noty.css";
+import "noty/src/themes/metroui.scss";
 
 const { Title } = Typography;
 
@@ -126,6 +129,31 @@ export default function Dashboard() {
           xPercent: log.checkpoint?.xPercent,
           yPercent: log.checkpoint?.yPercent,
         };
+
+        // 🔊 1. Ovozli signal
+        const audio = new Audio("/sound-example.wav");
+        audio.play().catch(() => {
+          console.warn(
+            "Audio autoplay blocklandi, foydalanuvchi interaksiyasi kerak."
+          );
+        });
+
+        // 🔔 2. Noty notification
+        new Noty({
+          text: `
+    <div class="text-[15px] leading-snug p-3">
+      <strong class="text-lg font-semibold">${formattedLog.guard}</strong><br/>
+      <span class="text-sm">${formattedLog.checkpoint}</span><br/>
+      <small class="text-xs text-blue-100">${new Date(
+        formattedLog.createdAtRaw
+      ).toLocaleString("uz-UZ")}</small>
+    </div>
+  `,
+          type: formattedLog.status === "ON_TIME" ? "success" : "error",
+          layout: "topRight",
+          theme: "metroui",
+          timeout: 5000,
+        }).show();
 
         // logs update
         setLogs((prev) => {
@@ -331,12 +359,22 @@ export default function Dashboard() {
             const remain = Math.max(totalTime - diffSec, 0);
 
             if (remain > 0) {
-              const minutes = String(Math.floor(remain / 60)).padStart(2, "0");
-              const seconds = String(remain % 60).padStart(2, "0");
-              timeDiff = `${minutes}:${seconds}`;
+              const hours = Math.floor(remain / 3600);
+              const minutes = Math.floor((remain % 3600) / 60);
+              const seconds = remain % 60;
+
+              // faqat soat bo‘lsa ko‘rsatamiz
+              if (hours > 0) {
+                timeDiff = `${String(hours).padStart(2, "0")}:${String(
+                  minutes
+                ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+              } else {
+                timeDiff = `${String(minutes).padStart(2, "0")}:${String(
+                  seconds
+                ).padStart(2, "0")}`;
+              }
             }
           }
-
           return (
             <div
               key={cp.id}

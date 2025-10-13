@@ -34,6 +34,7 @@ const MapContainerWrapper = ({
   modalOpen,
   setZoom,
   onAddCheckpoint,
+  mapType = "y",
 }) => {
   const mapRef = useRef(null);
 
@@ -81,7 +82,7 @@ const MapContainerWrapper = ({
       attributionControl={false}
     >
       <TileLayer
-        url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+        url={`https://mt1.google.com/vt/lyrs=${mapType}&x={x}&y={y}&z={z}`}
         attribution='&copy; <a href="https://www.google.com/maps">Google Maps</a>'
       />
       {objectPosition && (
@@ -112,6 +113,7 @@ const Objects = () => {
   const [image, setImage] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
   const [objectName, setObjectName] = useState("");
+  const [mapType, setMapType] = useState("y"); // 🗺️ default: hybrid
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -548,11 +550,21 @@ const Objects = () => {
             <div className="flex items-center gap-3 mt-2">
               <span>Zoom:</span>
               <InputNumber
-                min={1}
-                max={50}
+                min={0}
+                max={20}
                 value={zoom}
                 onChange={(val) => setZoom(val)}
               />
+              <Select
+                value={mapType}
+                onChange={setMapType}
+                style={{ width: 180 }}
+              >
+                <Option value="m">🛣️ Odatdagi</Option>
+                <Option value="s">🛰️ Sattelit</Option>
+                <Option value="y">🌍 Hybrid</Option>
+                <Option value="p">⛰️ Terrain</Option>
+              </Select>
             </div>
           )}
 
@@ -569,7 +581,7 @@ const Objects = () => {
                 attributionControl={false}
               >
                 <TileLayer
-                  url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+                  url={`https://mt1.google.com/vt/lyrs=${mapType}&x={x}&y={y}&z={z}`}
                   attribution='&copy; <a href="https://www.google.com/maps">Google Maps</a>'
                 />
                 <LocationMarker />
@@ -694,6 +706,7 @@ const Objects = () => {
             modalOpen={isViewModalOpen}
             setZoom={setZoom} // 🔥 qo‘shildi
             attributionControl={false}
+            mapType={mapType}
           />
         )}
       </Modal>
@@ -747,11 +760,21 @@ const Objects = () => {
             <div className="flex items-center gap-3 mb-4">
               <span>Zoom:</span>
               <InputNumber
-                min={1}
-                max={50}
+                min={0}
+                max={20}
                 value={zoom}
                 onChange={(val) => setZoom(val)}
               />
+              <Select
+                value={mapType}
+                onChange={setMapType}
+                style={{ width: 180 }}
+              >
+                <Option value="m">🛣️ Odatdagi</Option>
+                <Option value="s">🛰️ Sattelit</Option>
+                <Option value="y">🌍 Hybrid</Option>
+                <Option value="p">⛰️ Terrain</Option>
+              </Select>
             </div>
             <MapContainerWrapper
               objectPosition={objectPosition}
@@ -759,6 +782,7 @@ const Objects = () => {
               checkpoints={checkpoints}
               modalOpen={isEditModalOpen}
               setZoom={setZoom}
+              mapType={mapType}
               onAddCheckpoint={(lat, lng) => {
                 setCheckpoints((prev) => [
                   ...prev,

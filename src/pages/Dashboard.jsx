@@ -1,64 +1,152 @@
-import { useEffect, useState } from "react";
-import { Typography, Spin, Table, Button, Modal } from "antd";
+import React, { useEffect, useState } from "react";
+import { Typography, Spin, Table, Button, Modal, Select } from "antd";
 import { instance } from "../config/axios-instance";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { socket } from "../config/socket";
 import toast from "react-hot-toast";
 import Noty from "noty";
 import "noty/lib/noty.css";
 import "noty/src/themes/metroui.scss";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Tooltip,
+  Polyline,
+} from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+// default icon to fix missing marker
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
 
 const { Title } = Typography;
+const { Option } = Select;
 
 export default function Dashboard() {
-  const { mapId } = useParams();
-  const baseUrl = import.meta.env.VITE_SERVER_PORT;
-
-  const [selectedMap, setSelectedMap] = useState(null);
-  const [loadingSelected, setLoadingSelected] = useState(true);
+  const [maps, setMaps] = useState([]); // 🔹 barcha obyektlar
+  const [selectedMap, setSelectedMap] = useState(null); // 🔹 tanlangan obyekt
+  const [loading, setLoading] = useState(true);
   const [guards, setGuards] = useState([]);
   const [logs, setLogs] = useState([]);
   const [showTables, setShowTables] = useState(false);
+  const [now, setNow] = useState(new Date());
+  const [gpsPoints, setGpsPoints] = useState([]);
+  const [mapType, setMapType] = useState("y"); // 🗺️ default: hybrid
+
+  const baseUrl = import.meta.env.VITE_SERVER_PORT;
   const navigate = useNavigate();
   const { user } = useAuthStore((store) => store);
 
-  const [now, setNow] = useState(new Date());
-
-  const getFirstMap = async () => {
-    const resFirst = await instance.get(`/admin/first-object`);
-    return resFirst?.data?.id;
+  // 🟢 Barcha obyektlarni olish
+  const fetchAllMaps = async () => {
+    try {
+      const res = await instance.get("/admin/objects");
+      setMaps(res.data || []);
+    } catch (err) {
+      toast.error("Obyektlar ro‘yxatini yuklab bo‘lmadi 😞");
+    }
   };
 
+  // 🟢 Tanlangan obyektni yuklash
   const handleSelectMap = async (id) => {
+    setLoading(true);
     try {
       const res = await instance.get(`/admin/object/${id}`);
-      const { data } = await instance.get("/admin/checkpoints");
+      const { data } = await instance.get(`/admin/checkpoints?objectId=${id}`);
 
       const m = {
         ...res.data,
-        checkpoints: data?.res,
+        checkpoints: data?.res || [],
         imageUrl: `${baseUrl}${res.data.imageUrl}`,
       };
 
       setSelectedMap(m);
+      await fetchInitialLogs(id);
     } catch (err) {
-      toast.error("Mapni yuklab bo‘lmadi");
+      toast.error("Obyekt ma'lumotlarini yuklab bo‘lmadi 😕");
     } finally {
-      setLoadingSelected(false);
+      setLoading(false);
     }
   };
 
-  const fetchInitialLogs = async () => {
+  // 🟢 Loglarni olish
+  const fetchInitialLogs = async (objectId) => {
     try {
-      const quantity = selectedMap?.checkpoints.length;
-
-      const res = await instance.get(`/admin/logs?limit=${quantity || 10}`); // 🔹 API'da limitni qo‘yib olish kerak
+      const res = await instance.get(
+        `/admin/logs?objectId=${objectId}&limit=10`
+      );
       const data = res?.data?.data || [];
 
       const formattedLogs = data.map((log) => ({
         id: log.id,
-        guard: log.user?.login || "Unknown",
+        guard: log.user?.username || "Noma'lum",
+        checkpoint: log.checkpoint?.name || "-",
+        status: log.status,
+        createdAt: new Date(log.createdAt).toLocaleTimeString(),
+        createdAtRaw: new Date(log.createdAt),
+        zoneId: log.checkpoint?.id,
+        userId: log.userId,
+      }));
+
+      setLogs(formattedLogs);
+
+      const guardsArr = [];
+      data.forEach((log) => {
+        if (!log.userId) return;
+        if (!guardsArr.some((g) => g.guardId === log.userId)) {
+          guardsArr.push({
+            guardId: log.userId,
+            login: log.user?.login,
+            username: log.user?.username,
+            checkpointName: log.checkpoint?.name,
+            status: log.status,
+          });
+        }
+      });
+
+      setGuards(guardsArr);
+    } catch {
+      toast.error("Loglarni olishda xatolik yuz berdi ⚠️");
+    }
+  };
+
+  // 🧠 INIT EFFECT
+  useEffect(() => {
+    const init = async () => {
+      await fetchAllMaps();
+    };
+
+    init();
+  }, []); // 🟢 faqat bir marta ishlaydi (mount paytida)
+
+  useEffect(() => {
+    if (maps.length > 0 && !selectedMap) {
+      handleSelectMap(maps[0].id);
+    }
+  }, [maps]); // 🟢 faqat maps yangilansa, lekin fetch ichida emas
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []); // 🕒 vaqt yangilanishi mustaqil effect
+
+  useEffect(() => {
+    // 🧠 Socketdan real-time loglarni olish (faqat bir marta)
+    const handleLog = (log) => {
+      // Agar tanlangan obyekt bo‘lsa, va log shu obyektga tegishli bo‘lsa:
+      if (!selectedMap || log?.checkpoint.objectId !== selectedMap.id) return;
+
+      const formattedLog = {
+        id: log.id,
+        guard: log.user?.username || "Noma'lum",
         checkpoint: log.checkpoint?.name || "-",
         status: log.status,
         createdAt: new Date(log.createdAt).toLocaleTimeString(),
@@ -67,144 +155,92 @@ export default function Dashboard() {
         userId: log.userId,
         xPercent: log.checkpoint?.xPercent,
         yPercent: log.checkpoint?.yPercent,
-      }));
+      };
 
-      setLogs(formattedLogs);
-
-      // 🔹 Guards ni ham logsdan yig‘ib olish
-      const formattedGuards = [];
-      data.forEach((log) => {
-        if (!log.userId) return;
-
-        const exists = formattedGuards.find((g) => g.guardId === log.userId);
-        if (!exists) {
-          formattedGuards.push({
-            guardId: log.userId,
-            login: log.user?.login,
-            username: log.user?.username,
-            xPercent: log.checkpoint?.xPercent,
-            yPercent: log.checkpoint?.yPercent,
-            checkpointName: log.checkpoint?.name,
-            status: log.status,
-            zoneId: log.checkpoint?.id,
-          });
-        }
-      });
-
-      setGuards(formattedGuards);
-    } catch (err) {
-      toast.error("Dastlabki loglarni olishda xatolik");
-    }
-  };
-
-  useEffect(() => {
-    const init = async () => {
-      const id = await getFirstMap();
-
-      if (!id) {
-        setLoadingSelected(false);
-        toast.error("Ma'lumot topilmadi yoki hali yaratilmagan");
-        return;
-      }
-
-      await handleSelectMap(id);
-
-      // ⏰ vaqtni update qilish
-      const timer = setInterval(() => setNow(new Date()), 1000);
-
-      let socketReceived = false;
-
-      socket.on("logs", (log) => {
-        socketReceived = true;
-
-        const formattedLog = {
-          id: log.id,
-          guard: log.user?.username || "Unknown",
-          checkpoint: log.checkpoint?.name || "-",
-          status: log.status,
-          createdAt: new Date(log.createdAt).toLocaleTimeString(),
-          createdAtRaw: new Date(log.createdAt),
-          zoneId: log.checkpoint?.id,
-          userId: log.userId,
-          xPercent: log.checkpoint?.xPercent,
-          yPercent: log.checkpoint?.yPercent,
-        };
-
-        // 🔊 1. Ovozli signal
+      if (
+        formattedLog.status === "ON_TIME" ||
+        formattedLog.status === "MISSED"
+      ) {
+        // 🔊 audio va noty xabarnoma
         const audio = new Audio("/sound-example.wav");
-        audio.play().catch(() => {
-          console.warn(
-            "Audio autoplay blocklandi, foydalanuvchi interaksiyasi kerak."
-          );
-        });
+        audio.play().catch(() => {});
 
-        // 🔔 2. Noty notification
         new Noty({
-          text: `
-    <div class="text-[15px] leading-snug p-3">
-      <strong class="text-lg font-semibold">${formattedLog.guard}</strong><br/>
-      <span class="text-sm">${formattedLog.checkpoint}</span><br/>
-      <small class="text-xs text-blue-100">${new Date(
-        formattedLog.createdAtRaw
-      ).toLocaleString("uz-UZ")}</small>
-    </div>
-  `,
+          text: `<b>${formattedLog.guard}</b> - ${formattedLog.checkpoint}`,
           type: formattedLog.status === "ON_TIME" ? "success" : "error",
           layout: "topRight",
-          theme: "metroui",
-          timeout: 5000,
+          timeout: 4000,
         }).show();
+      }
 
-        // logs update
-        setLogs((prev) => {
-          const newLogs = [formattedLog, ...prev];
-          return newLogs.slice(0, 50);
-        });
+      // 🧩 logs update
+      setLogs((prev) => [formattedLog, ...prev].slice(0, 50));
 
-        // guards update
-        setGuards((prev) => {
-          const copy = [...prev];
-          const index = copy.findIndex((g) => g.guardId === log.userId);
-          if (index >= 0) {
-            copy[index] = {
+      // 🧩 guards update
+      setGuards((prev) => {
+        const index = prev.findIndex((g) => g.guardId === log.userId);
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            checkpointName: log.checkpoint?.name,
+            status: log.status,
+          };
+          return updated;
+        } else {
+          return [
+            ...prev,
+            {
               guardId: log.userId,
-              login: log.user?.login,
+              login: log.user?.username,
               username: log.user?.username,
-              xPercent: log.checkpoint?.xPercent,
-              yPercent: log.checkpoint?.yPercent,
               checkpointName: log.checkpoint?.name,
               status: log.status,
-              zoneId: log.checkpoint?.id,
-            };
-          } else {
-            copy.push({
-              guardId: log.userId,
-              login: log.user?.login,
-              username: log.user?.username,
-              xPercent: log.checkpoint?.xPercent,
-              yPercent: log.checkpoint?.yPercent,
-              checkpointName: log.checkpoint?.name,
-              status: log.status,
-              zoneId: log.checkpoint?.id,
-            });
-          }
-          return copy;
-        });
-      });
-
-      setTimeout(async () => {
-        if (!socketReceived) {
-          await fetchInitialLogs();
+            },
+          ];
         }
-      }, 1000);
-
-      return () => {
-        clearInterval(timer);
-        socket.off("logs");
-      };
+      });
     };
 
-    init();
+    socket.on("logs", handleLog);
+
+    return () => {
+      socket.off("logs", handleLog);
+    };
+  }, [selectedMap?.id]); // 🧩 faqat obyekt o‘zgarganda yangilanadi
+
+  // 🟢 selectedMap o‘zgarganda socket room’ga qo‘shiladi
+  useEffect(() => {
+    if (!selectedMap?.id) return;
+
+    socket.emit("join", selectedMap.id);
+
+    return () => {
+      socket.emit("leave", selectedMap.id);
+    };
+  }, [selectedMap?.id]);
+
+  // 🛰️ GPS real-time yangilanishlar
+  useEffect(() => {
+    const handleGps = async (msg) => {
+      // Masalan: msg = "gps:3"
+      if (!msg.startsWith("gps:")) return;
+
+      const userId = msg.split(":")[1];
+      try {
+        const res = await instance.get(`/admin/gps/${userId}?limit=20`);
+        const points = res.data.map((p) => [p.location.lat, p.location.lng]);
+        setGpsPoints(points);
+      } catch (err) {
+        toast.error("GPS ma’lumotlarini yuklab bo‘lmadi 📡");
+      }
+    };
+
+    socket.on("gps", handleGps);
+
+    return () => {
+      socket.off("gps", handleGps);
+    };
   }, []);
 
   const guardColumns = [
@@ -215,7 +251,7 @@ export default function Dashboard() {
   ];
 
   const logColumns = [
-    { title: "Guard login", dataIndex: "guard", key: "guard" },
+    { title: "Guard", dataIndex: "guard", key: "guard" },
     { title: "Checkpoint", dataIndex: "checkpoint", key: "checkpoint" },
     { title: "Status", dataIndex: "status", key: "status" },
     {
@@ -233,42 +269,14 @@ export default function Dashboard() {
     },
   ];
 
-  if (loadingSelected) {
-    return (
-      <div className="p-8">
-        <Spin size="large" />
-      </div>
-    );
-  }
-
-  if (!selectedMap) {
-    return (
-      <>
-        <div className="p-8 text-center text-gray-700">
-          Ma'lumot topilmadi yoki hali yaratilmagan
-        </div>
-        {user && user.role && user.role == "ADMIN" && (
-          <div className="text-center">
-            <button
-              onClick={() => navigate("/admin")}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Admin panel
-            </button>
-          </div>
-        )}
-      </>
-    );
-  }
-
   return (
     <div className="h-screen w-screen overflow-hidden">
-      <div className="flex items-center justify-between mx-20 py-4">
+      <div className="mb-1 flex items-center justify-between px-10 py-4 bg-white border-b shadow-sm">
         <div className="flex gap-3 items-center">
           <Title level={3} className="!mb-0">
-            {selectedMap.name}
+            {selectedMap ? selectedMap.name : "Obyekt tanlanmagan"}
           </Title>
-          <div className="flex gap-1 items-center">
+          <span className="text-black">
             {now.toLocaleTimeString("uz-UZ", {
               day: "numeric",
               month: "numeric",
@@ -276,153 +284,327 @@ export default function Dashboard() {
               hour: "2-digit",
               minute: "2-digit",
             })}
-          </div>
-          {user && user.role && user.role == "ADMIN" && (
-            <div className="text-center">
-              <button
-                onClick={() => navigate("/admin")}
-                className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Admin panel
-              </button>
-            </div>
+          </span>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Select
+            placeholder="Obyektni tanlang"
+            style={{ width: 200 }}
+            onChange={(id) => handleSelectMap(id)}
+            value={selectedMap?.id}
+          >
+            {maps.map((m) => (
+              <Option key={m.id} value={m.id}>
+                {m.name}
+              </Option>
+            ))}
+          </Select>
+          <Button type="primary" onClick={() => setShowTables(true)}>
+            Tafsilotlar
+          </Button>
+          {user?.role === "ADMIN" && (
+            <Button onClick={() => navigate("/admin")}>Admin Panel</Button>
           )}
         </div>
-        <Button onClick={() => setShowTables(true)}>Show Details</Button>
-        <Modal
-          title="Map Details"
-          open={showTables}
-          onCancel={() => setShowTables(false)}
-          footer={null}
-          width="90vw"
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <div className="border rounded-xl p-4">
-              <Title level={4}>Latest Logs</Title>
-              <Table
-                dataSource={logs.map((l, index) => ({ ...l, key: index }))}
-                columns={logColumns}
-                pagination={false}
-                scroll={{ y: 400, x: true }}
-              />
-            </div>
-            <div className="border rounded-xl p-4">
-              <Title level={4}>Guards</Title>
-              <Table
-                dataSource={guards.map((g, index) => ({
-                  ...g,
-                  key: index,
-                }))}
-                columns={guardColumns}
-                pagination={false}
-                scroll={{ y: 200, x: true }}
-              />
-            </div>
-          </div>
-        </Modal>
       </div>
 
-      <div className="relative h-11/12 w-11/12 border rounded-xl overflow-hidden m-auto">
-        <img
-          src={selectedMap.imageUrl}
-          alt={selectedMap.name}
-          className="h-full w-full"
-        />
+      {/* LOADING / EMPTY */}
+      {loading && (
+        <div className="h-[80vh] flex items-center justify-center">
+          <Spin size="large" />
+        </div>
+      )}
 
-        {selectedMap.checkpoints?.map((cp) => {
-          const latestLog = [...logs]
-            .filter((l) => l.zoneId === cp.id)
-            .sort((a, b) => b.createdAtRaw - a.createdAtRaw)[0];
+      {!loading && selectedMap && (
+        <>
+          {selectedMap && (
+            <div className="relative h-11/12 w-11/12 border rounded-xl overflow-hidden m-auto">
+              {selectedMap.type === "IMAGE" ? (
+                <>
+                  <img
+                    src={selectedMap.imageUrl}
+                    alt={selectedMap.name}
+                    className="h-full w-full"
+                  />
 
-          const statusColors = {
-            ON_TIME: "bg-green-500",
-            LATE: "bg-yellow-500",
-            MISSED: "bg-red-500",
-          };
+                  {selectedMap.checkpoints?.map((cp) => {
+                    const latestLog = [...logs]
+                      .filter((l) => l.zoneId === cp.id)
+                      .sort((a, b) => b.createdAtRaw - a.createdAtRaw)[0];
 
-          const statusColor = latestLog
-            ? statusColors[latestLog.status] || "bg-gray-400"
-            : "bg-gray-400";
+                    const statusColors = {
+                      ON_TIME: "bg-green-500",
+                      LATE: "bg-yellow-500",
+                      MISSED: "bg-red-500",
+                    };
+                    const statusColor = latestLog
+                      ? statusColors[latestLog.status] || "bg-gray-400"
+                      : "bg-gray-400";
 
-          let timeDiff = null;
-          if (latestLog) {
-            const now = Date.now();
-            const diffSec = Math.floor((now - latestLog.createdAtRaw) / 1000);
+                    let timeDiff = null;
+                    if (latestLog) {
+                      const now = Date.now();
+                      const diffSec = Math.floor(
+                        (now - latestLog.createdAtRaw) / 1000
+                      );
 
-            let totalTime = 0;
-            if (latestLog.status === "ON_TIME") {
-              totalTime = (cp.normal_time || 0) * 60;
-            } else if (latestLog.status === "LATE") {
-              totalTime = (cp.pass_time || 0) * 60;
-            }
+                      let totalTime = 0;
+                      if (latestLog.status === "ON_TIME") {
+                        totalTime = (cp.normal_time || 0) * 60;
+                      } else if (latestLog.status === "LATE") {
+                        totalTime = (cp.pass_time || 0) * 60;
+                      }
 
-            const remain = Math.max(totalTime - diffSec, 0);
+                      const remain = Math.max(totalTime - diffSec, 0);
 
-            if (remain > 0) {
-              const hours = Math.floor(remain / 3600);
-              const minutes = Math.floor((remain % 3600) / 60);
-              const seconds = remain % 60;
+                      if (remain > 0) {
+                        const hours = Math.floor(remain / 3600);
+                        const minutes = Math.floor((remain % 3600) / 60);
+                        const seconds = remain % 60;
 
-              // faqat soat bo‘lsa ko‘rsatamiz
-              if (hours > 0) {
-                timeDiff = `${String(hours).padStart(2, "0")}:${String(
-                  minutes
-                ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-              } else {
-                timeDiff = `${String(minutes).padStart(2, "0")}:${String(
-                  seconds
-                ).padStart(2, "0")}`;
-              }
-            }
-          }
-          return (
-            <div
-              key={cp.id}
-              className="absolute flex flex-col items-center"
-              style={{
-                top: `${cp.position.yPercent}%`,
-                left: `${cp.position.xPercent}%`,
-              }}
-            >
-              <div className="bg-white rounded-lg border px-1 py-1 flex items-center gap-1 shadow">
-                <div className={`w-6 h-6 rounded-full ${statusColor}`} />
-                <div className="text-xs">
-                  {latestLog ? (
-                    <>
-                      {cp.name}
-                      <br />
-                      <span className="font-medium">{latestLog.guard}</span>
-                      <br />
-                      <span>
-                        {new Date(latestLog.createdAtRaw).toLocaleString(
-                          "uz-UZ",
-                          {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
+                        // faqat soat bo‘lsa ko‘rsatamiz
+                        if (hours > 0) {
+                          timeDiff = `${String(hours).padStart(
+                            2,
+                            "0"
+                          )}:${String(minutes).padStart(2, "0")}:${String(
+                            seconds
+                          ).padStart(2, "0")}`;
+                        } else {
+                          timeDiff = `${String(minutes).padStart(
+                            2,
+                            "0"
+                          )}:${String(seconds).padStart(2, "0")}`;
+                        }
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={cp.id}
+                        className="absolute flex flex-col items-center"
+                        style={{
+                          top: `${cp.position?.yPercent || 0}%`,
+                          left: `${cp.position?.xPercent || 0}%`,
+                        }}
+                      >
+                        <div
+                          className={`bg-white rounded-lg border px-2 py-1 flex flex-col items-center gap-1 shadow`}
+                        >
+                          <div
+                            className={`w-6 h-6 rounded-full ${statusColor}`}
+                          />
+                          <div className="text-sm text-center">
+                            <div>{cp.name}</div>
+                            {latestLog && (
+                              <div className="font-medium">
+                                {latestLog.guard}
+                              </div>
+                            )}
+                            {timeDiff && (
+                              <div className="text-blue-600 font-semibold">
+                                {timeDiff}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                selectedMap.type === "MAP" && (
+                  <>
+                    {/* 🧭 Xarita turi tanlash */}
+                    <div
+                      className="absolute top-3 left-15 z-[1000] bg-white rounded-md shadow-md p-2 flex items-center gap-2"
+                      style={{ fontSize: "14px" }}
+                    >
+                      <span className="font-medium">Xarita turi:</span>
+                      <Select
+                        size="small"
+                        value={mapType}
+                        onChange={(val) => setMapType(val)}
+                        style={{ width: 160 }}
+                      >
+                        <Option value="m">🛣️ Oddiy</Option>
+                        <Option value="s">🛰️ Sun’iy yo‘ldosh</Option>
+                        <Option value="y">🌍 Aralash</Option>
+                        <Option value="p">⛰️ Relyef</Option>
+                      </Select>
+                    </div>
+
+                    <MapContainer
+                      center={selectedMap.position || [41, 61]}
+                      zoom={selectedMap.zoom || 15}
+                      scrollWheelZoom={true}
+                      style={{ height: "100%", width: "100%" }}
+                      attributionControl={false}
+                    >
+                      <TileLayer
+                        url={`https://{s}.google.com/vt/lyrs=${mapType}&x={x}&y={y}&z={z}`}
+                        subdomains={["mt0", "mt1", "mt2", "mt3"]}
+                        attribution="© Google Maps"
+                      />
+
+                      {selectedMap.checkpoints?.map((cp) => {
+                        if (!cp.location.lat || !cp.location.lng) return null;
+
+                        const latestLog = [...logs]
+                          .filter((l) => l.zoneId === cp.id)
+                          .sort((a, b) => b.createdAtRaw - a.createdAtRaw)[0];
+
+                        const statusColors = {
+                          ON_TIME: "green",
+                          LATE: "yellow",
+                          MISSED: "red",
+                        };
+                        const color = latestLog
+                          ? statusColors[latestLog.status]
+                          : "gray";
+
+                        let timeDiff = null;
+                        if (latestLog) {
+                          const now = Date.now();
+                          const diffSec = Math.floor(
+                            (now - latestLog.createdAtRaw) / 1000
+                          );
+
+                          let totalTime = 0;
+                          if (latestLog.status === "ON_TIME") {
+                            totalTime = (cp.normal_time || 0) * 60;
+                          } else if (latestLog.status === "LATE") {
+                            totalTime = (cp.pass_time || 0) * 60;
                           }
-                        )}
-                      </span>
-                    </>
-                  ) : (
-                    <>{cp.name}</>
-                  )}
-                </div>
-              </div>
 
-              {timeDiff && (
-                <div className="bg-white rounded-b-lg px-1">
-                  <span className="text-blue-600 font-semibold">
-                    {timeDiff}
-                  </span>
-                </div>
+                          const remain = Math.max(totalTime - diffSec, 0);
+
+                          if (remain > 0) {
+                            const hours = Math.floor(remain / 3600);
+                            const minutes = Math.floor((remain % 3600) / 60);
+                            const seconds = remain % 60;
+
+                            // faqat soat bo‘lsa ko‘rsatamiz
+                            if (hours > 0) {
+                              timeDiff = `${String(hours).padStart(
+                                2,
+                                "0"
+                              )}:${String(minutes).padStart(2, "0")}:${String(
+                                seconds
+                              ).padStart(2, "0")}`;
+                            } else {
+                              timeDiff = `${String(minutes).padStart(
+                                2,
+                                "0"
+                              )}:${String(seconds).padStart(2, "0")}`;
+                            }
+                          }
+                        }
+
+                        return (
+                          <React.Fragment key={cp.id}>
+                            <Marker
+                              key={cp.id}
+                              position={[cp.location.lat, cp.location.lng]}
+                              icon={L.divIcon({
+                                className: "",
+                                html: `<div style="
+                                  background:${color};
+                                  width:16px;
+                                  height:16px;
+                                  border-radius:50%;
+                                  border:2px solid white;
+                                  display:flex;
+                                  align-items:center;
+                                  justify-content:center;">
+                                </div>`,
+                              })}
+                            >
+                              <Tooltip
+                                direction="top"
+                                offset={[0, -10]}
+                                permanent
+                              >
+                                <div className="text-sm text-center">
+                                  <strong>{cp.name}</strong>
+                                  {latestLog && (
+                                    <>
+                                      <br />
+                                      {latestLog.guard}
+                                    </>
+                                  )}
+                                  {timeDiff && (
+                                    <div className="text-blue-600 font-semibold">
+                                      {timeDiff}
+                                    </div>
+                                  )}
+                                </div>
+                              </Tooltip>
+                            </Marker>
+                            {gpsPoints.length > 0 && (
+                              <>
+                                <Polyline
+                                  positions={gpsPoints}
+                                  color="blue"
+                                  weight={4}
+                                />
+                                {/* So‘nggi nuqtani marker bilan ko‘rsatish */}
+                                <Marker
+                                  position={gpsPoints[gpsPoints.length - 1]}
+                                >
+                                  <Tooltip
+                                    direction="top"
+                                    offset={[0, -10]}
+                                    permanent
+                                  >
+                                    <div className="text-sm font-semibold text-blue-700">
+                                      So‘nggi joylashuv
+                                    </div>
+                                  </Tooltip>
+                                </Marker>
+                              </>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </MapContainer>
+                  </>
+                )
               )}
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          {/* MODAL */}
+          <Modal
+            title="Tafsilotlar"
+            open={showTables}
+            onCancel={() => setShowTables(false)}
+            footer={null}
+            width="90vw"
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border rounded-xl p-4">
+                <Title level={4}>So‘nggi Loglar</Title>
+                <Table
+                  dataSource={logs.map((l, i) => ({ ...l, key: i }))}
+                  columns={logColumns}
+                  pagination={false}
+                  scroll={{ y: 400 }}
+                />
+              </div>
+              <div className="border rounded-xl p-4">
+                <Title level={4}>Xodimlar</Title>
+                <Table
+                  dataSource={guards.map((g, i) => ({ ...g, key: i }))}
+                  columns={guardColumns}
+                  pagination={false}
+                  scroll={{ y: 400 }}
+                />
+              </div>
+            </div>
+          </Modal>
+        </>
+      )}
     </div>
   );
 }

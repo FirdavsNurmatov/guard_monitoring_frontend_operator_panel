@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import {
   Button,
   Upload,
@@ -12,12 +12,102 @@ import {
 import { UploadOutlined } from "@ant-design/icons";
 import { instance } from "../../config/axios-instance";
 import toast from "react-hot-toast";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Tooltip,
+  useMapEvents,
+} from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { Select } from "antd";
+const { Option } = Select;
+
+{
+  /* Leaflet wrapper component */
+}
+const MapContainerWrapper = ({
+  objectPosition,
+  zoom,
+  checkpoints,
+  modalOpen,
+  setZoom,
+  onAddCheckpoint,
+}) => {
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (modalOpen && mapRef.current) {
+      setTimeout(() => {
+        mapRef.current.invalidateSize();
+        if (objectPosition) {
+          mapRef.current.setView(
+            [objectPosition.lat, objectPosition.lng],
+            zoom
+          );
+        }
+      }, 500);
+    }
+  }, [modalOpen, objectPosition, zoom]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.setZoom(zoom);
+    }
+  }, [zoom]); // 🔥 zoom o‘zgarganda sinxron bo‘lsin
+
+  const mapClickHandler = (e) => {
+    if (onAddCheckpoint) {
+      const { lat, lng } = e.latlng;
+      onAddCheckpoint(lat, lng);
+    }
+  };
+
+  return (
+    <MapContainer
+      center={[objectPosition?.lat || 41.31, objectPosition?.lng || 69.28]}
+      zoom={zoom || 15}
+      whenCreated={(mapInstance) => {
+        mapRef.current = mapInstance;
+        mapInstance.on("click", mapClickHandler);
+        if (setZoom) {
+          mapInstance.on("zoomend", () => setZoom(mapInstance.getZoom()));
+        }
+      }}
+      style={{ height: "500px", width: "100%" }}
+      zoomControl
+      scrollWheelZoom
+      attributionControl={false}
+    >
+      <TileLayer
+        url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+        attribution='&copy; <a href="https://www.google.com/maps">Google Maps</a>'
+      />
+      {objectPosition && (
+        <Marker position={[objectPosition.lat, objectPosition.lng]} />
+      )}
+      {checkpoints?.map((cp, i) =>
+        cp.location ? (
+          <Marker key={i} position={[cp.location.lat, cp.location.lng]}>
+            <Tooltip permanent direction="top">
+              {cp.name || `${i + 1}-punkt`}
+            </Tooltip>
+          </Marker>
+        ) : null
+      )}
+    </MapContainer>
+  );
+};
 
 const Objects = () => {
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [zoom, setZoom] = useState(15); // default 15
 
   const [objectId, setObjectId] = useState(null);
+  const [objectType, setObjectType] = useState("IMAGE"); // default IMAGE
+  const [objectPosition, setObjectPosition] = useState(null);
   const [file, setFile] = useState(null);
   const [image, setImage] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
@@ -28,12 +118,87 @@ const Objects = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [apiError, setApiError] = useState("");
 
+  const objectIcon = L.icon({
+    iconUrl:
+      "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-red.png",
+    shadowUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+  });
+
+  const checkpointIcon = L.icon({
+    iconUrl:
+      "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-green.png",
+    shadowUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+  });
+
+  // 🔹 Leaflet uchun marker joylash komponenti
+  const LocationMarker = () => {
+    useMapEvents({
+      click(e) {
+        const { lat, lng } = e.latlng;
+
+        if (!objectPosition) {
+          // 1️⃣ Birinchi nuqta — objectning o‘zi
+          setObjectPosition({ lat, lng });
+          toast.success("📍 Object joylashuvi belgilandi");
+        } else {
+          // 2️⃣ Keyingi nuqtalar — checkpoints
+          setCheckpoints((prev) => [
+            ...prev,
+            {
+              name: "",
+              normal_time: 15,
+              pass_time: 2,
+              card_number: "",
+              location: { lat, lng },
+            },
+          ]);
+        }
+        toast.success("🟢 Yangi punkt qo‘shildi");
+      },
+    });
+
+    return (
+      <>
+        {/* Object marker (qizil) */}
+        {objectPosition && (
+          <Marker
+            position={[objectPosition.lat, objectPosition.lng]}
+            icon={objectIcon}
+          />
+        )}
+
+        {/* Checkpoints (yashil) */}
+        {checkpoints.map(
+          (cp, i) =>
+            cp?.location?.lat &&
+            cp?.location?.lng && (
+              <Marker
+                key={i}
+                position={[cp.location.lat, cp.location.lng]}
+                icon={checkpointIcon}
+              >
+                <Tooltip permanent direction="top">
+                  {cp.name || `${i + 1}-punkt`}
+                </Tooltip>
+              </Marker>
+            )
+        )}
+      </>
+    );
+  };
+
   const fetchObjects = async () => {
     try {
       const res = await instance.get("/admin/objects");
       setObjects(res.data);
     } catch (err) {
-      toast.error("Failed to fetch object ❌");
+      toast.error("❌ Obyektlarni yuklashda xatolik yuz berdi");
     } finally {
       setLoading(false);
     }
@@ -42,19 +207,27 @@ const Objects = () => {
   const fetchCheckpoints = async (id, type) => {
     try {
       const objectRes = await instance.get(`/admin/object/${id}`);
-      setObjectId(objectRes?.data?.id);
-      setObjectName(objectRes?.data?.name);
-      setImage(
-        `${import.meta.env.VITE_SERVER_PORT}${objectRes?.data?.imageUrl}`
-      );
+      const data = objectRes.data;
 
-      const res = await instance.get(`/admin/checkpoints`);
+      setObjectId(data?.id);
+      setObjectName(data?.name);
+      setImage(
+        data?.imageUrl
+          ? `${import.meta.env.VITE_SERVER_PORT}${data?.imageUrl}`
+          : null
+      );
+      setObjectType(data?.type || "IMAGE");
+      setObjectPosition(data?.position || null);
+      setZoom(data?.zoom || 15);
+
+      const res = await instance.get(`/admin/checkpoints?objectId=${id}`);
+
       setCheckpoints(res.data.res || []);
 
       if (type === "view") setIsViewModalOpen(true);
       if (type === "edit") setIsEditModalOpen(true);
     } catch (err) {
-      toast.error("Failed to fetch object details ❌");
+      toast.error("❌ Obyekt ma’lumotlarini yuklashda xatolik yuz berdi");
     }
   };
 
@@ -76,6 +249,7 @@ const Objects = () => {
     setImage(null);
     setObjectId(null);
     setCheckpoints([]);
+    setObjectPosition(null);
   };
 
   // 🚀 Faqat preview qilish (serverga yubormaydi)
@@ -95,50 +269,97 @@ const Objects = () => {
 
   const handleSubmit = async () => {
     try {
+      // 1️⃣ card_number tekshiruvi
       const cardNumbers = checkpoints
         .map((cp) => cp.card_number)
         .filter(Boolean);
+
       const duplicates = cardNumbers.filter(
         (cn, idx) => cardNumbers.indexOf(cn) !== idx
       );
 
       if (duplicates.length > 0) {
         toast.error(
-          `❌ Bunday card_number allaqachon mavjud: ${duplicates[0]}`
+          `❌ Bunday karta raqami allaqachon mavjud: ${duplicates[0]}`
         );
-        setApiError("Duplicate checkpoint card number");
+        setApiError(`Karta raqami takrorlanmoqda: ${duplicates[0]}`);
         return;
       }
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("name", objectName || `Map-${Date.now()}`);
 
-      await instance.post("/admin/object", formData, {
+      // 2️⃣ Bo‘sh  name uchun default qiymat beramiz
+      const updatedCheckpoints = checkpoints.map((cp, i) => ({
+        ...cp,
+        name: cp.name?.trim() || `${i + 1}-punkt`,
+      }));
+
+      // 3️⃣ FormData tayyorlash
+      const formData = new FormData();
+      if (file) formData.append("file", file);
+      formData.append("name", objectName?.trim() || `Obyekt-${Date.now()}`);
+      formData.append("zoom", zoom.toString());
+      formData.append("type", objectType);
+
+      if (objectPosition) {
+        formData.append("position", JSON.stringify(objectPosition));
+      }
+
+      // 4️⃣ Object yaratish
+      const res = await instance.post("/admin/object", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      for (const cp of checkpoints) {
-        await instance.post("/admin/checkpoints", cp);
+      const createdObjectId = res.data?.id;
+
+      // 6️⃣ Checkpointlarni parallel yuboramiz
+      try {
+        await Promise.all(
+          updatedCheckpoints.map((cp) => {
+            const data =
+              objectType === "MAP"
+                ? {
+                    ...cp,
+                    objectId: createdObjectId,
+                    position: undefined,
+                    location: cp.location,
+                  }
+                : {
+                    ...cp,
+                    objectId: createdObjectId,
+                    position: cp.position,
+                    location: undefined,
+                  };
+
+            return instance.post("/admin/checkpoints", data);
+          })
+        );
+      } catch (err) {
+        // Agar punktlardan biri xato bo‘lsa — objectni tozalaymiz
+        await instance.delete(`/admin/object/${createdObjectId}`);
+        toast.error("❌ Punkt yaratishda xatolik, obyekt o‘chirildi");
+        return;
       }
 
-      toast.success("Map created successfully ✅");
+      // 7️⃣ Muvaffaqiyatli natija
+      toast.success("✅ Obyekt va punktlar muvaffaqiyatli yaratildi!");
       fetchObjects();
       setIsCreateModalOpen(false);
       setApiError("");
     } catch (err) {
-      if (err?.response?.data?.message.includes("Duplicate"))
-        setApiError("Duplicate checkpoint card number");
-      toast.error("❌ Failed to create object");
+      if (err?.response?.data?.message?.includes("Duplicate"))
+        setApiError("Karta raqami takrorlanmoqda");
+      toast.error(
+        "❌ Obyekt yaratishda xatolik yuz berdi. Iltimos, qayta urinib ko‘ring."
+      );
     }
   };
 
   const handleDelete = async (id) => {
     try {
       await instance.delete(`/admin/object/${id}`);
-      toast.success("Object deleted ✅");
+      toast.success("🗑️ Obyekt muvaffaqiyatli o‘chirildi");
       fetchObjects();
     } catch (err) {
-      toast.error("Failed to delete object ❌");
+      toast.error("❌ Obyektni o‘chirishda xatolik yuz berdi");
     }
   };
 
@@ -148,40 +369,49 @@ const Objects = () => {
       const cardNumbers = checkpoints
         .map((cp) => cp.card_number)
         .filter(Boolean); // faqat to'ldirilganlarni olamiz
+
       const duplicates = cardNumbers.filter(
         (cn, idx) => cardNumbers.indexOf(cn) !== idx
       );
 
       if (duplicates.length > 0) {
         toast.error(
-          `❌ Bunday card_number allaqachon mavjud: ${duplicates[0]}`
+          `❌ Bunday karta raqami allaqachon mavjud: ${duplicates[0]}`
         );
-        setApiError(`Duplicate checkpoint card number: ${duplicates[0]}`);
+        setApiError(`Karta raqami takrorlanmoqda: ${duplicates[0]}`);
         return;
       }
 
       // 🔄 Object update
-      await instance.patch(`/admin/object/${objectId}`, { name: objectName });
+      await instance.patch(`/admin/object/${objectId}`, {
+        name: objectName,
+        zoom,
+      });
 
       for (const cp of checkpoints) {
         if (cp.id) {
           const { id, createdAt, updatedAt, ...data } = cp;
           await instance.patch(`/admin/checkpoints/${cp.id}`, data);
         } else {
-          await instance.post("/admin/checkpoints", cp);
+          await instance.post("/admin/checkpoints", {
+            ...cp,
+            objectId, // 🔗 mavjud objectga bog‘lash
+          });
         }
       }
 
-      toast.success("Object updated ✅");
+      toast.success("✅ Obyekt muvaffaqiyatli yangilandi");
       setIsEditModalOpen(false);
       fetchObjects();
       setApiError("");
     } catch (err) {
       if (err?.response?.data?.message.includes("Duplicate")) {
-        setApiError("Duplicate checkpoint card number");
-        toast.error("Ikkita bir xil card number mavjud ❌");
+        setApiError("Karta raqami takrorlanmoqda");
+        toast.error("❌ Ikkita bir xil karta raqami mavjud");
       } else {
-        toast.error("Failed to update object ❌");
+        toast.error(
+          "❌ Obyektni yangilashda xatolik yuz berdi. Iltimos, qayta urinib ko‘ring."
+        );
       }
     }
   };
@@ -215,43 +445,43 @@ const Objects = () => {
   const handleDeleteCheckpoint = async (id) => {
     try {
       await instance.delete(`/admin/checkpoints/${id}`);
-      toast.success("Checkpoint deleted ✅");
+      toast.success("🗑️ Punkt muvaffaqiyatli o‘chirildi");
       setCheckpoints(checkpoints.filter((cp) => cp.id !== id));
     } catch (err) {
-      toast.error("Failed to delete checkpoint ❌");
+      toast.error("❌ Punktni o‘chirishda xatolik yuz berdi");
     }
   };
 
   const columns = [
     {
-      title: "Image",
+      title: "Rasm",
       render: (_, record) => (
         <img
           src={`${import.meta.env.VITE_SERVER_PORT}${record?.imageUrl}`}
-          alt="zone image"
+          alt="Obyekt rasmi"
           className="max-w-16"
         />
       ),
     },
-    { title: "Name", dataIndex: "name" },
+    { title: "Nomi", dataIndex: "name" },
     {
-      title: "Actions",
+      title: "Amallar",
       render: (_, record) => (
         <Space>
           <Button onClick={() => fetchCheckpoints(record.id, "view")}>
-            View
+            Ko'rish
           </Button>
           <Button
             type="primary"
             onClick={() => fetchCheckpoints(record.id, "edit")}
           >
-            Edit
+            Tahrirlash
           </Button>
           <Popconfirm
-            title="Delete this map?"
+            title="Rostdan ham o'chirmoqchimisiz?"
             onConfirm={() => handleDelete(record.id)}
           >
-            <Button danger>Delete</Button>
+            <Button danger>O'chirish</Button>
           </Popconfirm>
         </Space>
       ),
@@ -259,23 +489,23 @@ const Objects = () => {
   ];
 
   return (
-    <div className="p-2">
+    <div className="">
       <div className="flex justify-between items-center mb-4">
-        {objects?.length == 0 && (
-          <Button
-            type="primary"
-            onClick={() => (setIsCreateModalOpen(true), openCreateModal())}
-          >
-            Create Map
-          </Button>
-        )}
+        <Button
+          type="primary"
+          onClick={() => (setIsCreateModalOpen(true), openCreateModal())}
+        >
+          Yangi obyekt yaratish
+        </Button>
       </div>
 
+      {/* Table  */}
       <Table
         dataSource={objects}
         columns={columns}
         rowKey="id"
         loading={loading}
+        locale={{ emptyText: "Hech qanday obyekt topilmadi" }}
       />
 
       {/* CREATE MODAL */}
@@ -284,27 +514,72 @@ const Objects = () => {
         onCancel={handleCloseCreateModal}
         footer={null}
         width={1200}
-        title="Create New Map"
+        title="🗺️ Yangi obyekt yaratish"
       >
         <div className="flex flex-col gap-2">
           <Input
-            placeholder="Map name"
+            placeholder="Obyekt nomini kiriting"
             value={objectName}
             onChange={(e) => setObjectName(e.target.value)}
           />
 
-          <Upload
-            accept="image/*"
-            beforeUpload={() => false}
-            onChange={handleMapUpload}
-            maxCount={1}
-            showUploadList={false}
+          <Select
+            value={objectType}
+            onChange={(value) => setObjectType(value)}
+            style={{ width: 200 }}
           >
-            <Button icon={<UploadOutlined />}>Upload Map</Button>
-          </Upload>
+            <Option value="IMAGE">🖼️ Rasm</Option>
+            <Option value="MAP">🗺️ Xarita</Option>
+          </Select>
+
+          {objectType === "IMAGE" && (
+            <Upload
+              accept="image/*"
+              beforeUpload={() => false}
+              onChange={handleMapUpload}
+              maxCount={1}
+              showUploadList={false}
+            >
+              <Button icon={<UploadOutlined />}>Rasm yuklash</Button>
+            </Upload>
+          )}
+
+          {objectType === "MAP" && (
+            <div className="flex items-center gap-3 mt-2">
+              <span>Zoom:</span>
+              <InputNumber
+                min={1}
+                max={50}
+                value={zoom}
+                onChange={(val) => setZoom(val)}
+              />
+            </div>
+          )}
+
+          {/* 🔹 type = MAP bo‘lsa — Leaflet chiqadi */}
+          {objectType === "MAP" && (
+            <div className="mt-4 border rounded-lg overflow-hidden">
+              <MapContainer
+                center={[41.31, 69.28]}
+                zoom={zoom}
+                whenCreated={(map) => {
+                  map.on("zoomend", () => setZoom(map.getZoom())); // 🧠 zoom har safar o‘zgarganda saqlab boradi
+                }}
+                style={{ height: "500px", width: "100%" }}
+                attributionControl={false}
+              >
+                <TileLayer
+                  url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+                  attribution='&copy; <a href="https://www.google.com/maps">Google Maps</a>'
+                />
+                <LocationMarker />
+              </MapContainer>
+            </div>
+          )}
         </div>
 
-        {image && (
+        {/* 🔹 IMAGE bo‘lsa rasm ustiga checkpoint qo‘yish */}
+        {objectType === "IMAGE" && isCreateModalOpen && image && (
           <div
             className="relative inline-block border rounded-xl shadow-md cursor-crosshair mt-4"
             onClick={handleImageClick}
@@ -324,7 +599,7 @@ const Objects = () => {
                 }}
               >
                 <div className="w-4 h-4 z-10 bg-green-500 rounded-full border-2 border-white shadow" />
-                <span className="max-w-[100px] text-xs bg-white px-1 rounded shadow">
+                <span className="text-xs bg-white px-1 rounded shadow">
                   {point.name || `CP-${index + 1}`}
                 </span>
               </div>
@@ -332,11 +607,9 @@ const Objects = () => {
           </div>
         )}
 
-        {apiError && <p className="text-[red] text-2xl">{apiError}</p>}
-
         {checkpoints.length > 0 && (
           <div className="mt-4 space-y-2">
-            {checkpoints.map((cp, i) => (
+            {checkpoints?.map((cp, i) => (
               <div
                 key={i}
                 className="flex gap-3 items-center border p-2 rounded"
@@ -345,32 +618,27 @@ const Objects = () => {
                   placeholder="Checkpoint name"
                   value={cp.name}
                   onChange={(e) => handleChange(i, "name", e.target.value)}
-                  style={{ width: "300px" }}
+                  style={{ width: "250px" }}
                 />
-
                 <InputNumber
                   min={1}
                   value={cp.normal_time}
                   onChange={(val) => handleChange(i, "normal_time", val)}
                   addonAfter="min"
-                  style={{ width: "200px" }}
                 />
-
                 <InputNumber
                   min={1}
                   value={cp.pass_time}
                   onChange={(val) => handleChange(i, "pass_time", val)}
                   addonAfter="min"
-                  style={{ width: "200px" }}
                 />
-
                 <Input
                   placeholder="Card number"
                   value={cp.card_number}
                   onChange={(e) =>
                     handleChange(i, "card_number", e.target.value)
                   }
-                  style={{ width: "250px" }}
+                  style={{ width: "200px" }}
                 />
               </div>
             ))}
@@ -391,16 +659,16 @@ const Objects = () => {
         onCancel={() => setIsViewModalOpen(false)}
         footer={null}
         width={1200}
-        title={`View Map: ${objectName}`}
+        title={`View Object: ${objectName}`}
       >
-        {image && (
+        {objectType === "IMAGE" && isViewModalOpen && image && (
           <div className="relative inline-block border rounded-xl shadow-md">
             <img
               src={image}
               alt="map"
               className="w-full max-h-[80vh] object-contain rounded-xl"
             />
-            {checkpoints.map((point, index) => (
+            {checkpoints?.map((point, index) => (
               <div
                 key={index}
                 className="absolute flex"
@@ -417,23 +685,36 @@ const Objects = () => {
             ))}
           </div>
         )}
+
+        {objectType === "MAP" && (
+          <MapContainerWrapper
+            objectPosition={objectPosition}
+            zoom={zoom}
+            checkpoints={checkpoints}
+            modalOpen={isViewModalOpen}
+            setZoom={setZoom} // 🔥 qo‘shildi
+            attributionControl={false}
+          />
+        )}
       </Modal>
 
       {/* EDIT MODAL */}
       <Modal
+        title={`Obyektni tahrirlash: ${objectName}`}
         open={isEditModalOpen}
         onCancel={() => setIsEditModalOpen(false)}
         footer={null}
         width={1200}
-        title={`Edit Map: ${objectName}`}
       >
-        <Input
-          placeholder="Map name"
-          value={objectName}
-          onChange={(e) => setObjectName(e.target.value)}
-        />
+        <div className="mb-4">
+          <Input
+            placeholder="Obyekt nomi"
+            value={objectName}
+            onChange={(e) => setObjectName(e.target.value)}
+          />
+        </div>
 
-        {image && (
+        {image && isEditModalOpen && (
           <div
             className="mt-4 relative inline-block border rounded-xl shadow-md cursor-crosshair"
             onClick={handleImageClick}
@@ -461,8 +742,43 @@ const Objects = () => {
           </div>
         )}
 
+        {objectType === "MAP" && (
+          <>
+            <div className="flex items-center gap-3 mb-4">
+              <span>Zoom:</span>
+              <InputNumber
+                min={1}
+                max={50}
+                value={zoom}
+                onChange={(val) => setZoom(val)}
+              />
+            </div>
+            <MapContainerWrapper
+              objectPosition={objectPosition}
+              zoom={zoom}
+              checkpoints={checkpoints}
+              modalOpen={isEditModalOpen}
+              setZoom={setZoom}
+              onAddCheckpoint={(lat, lng) => {
+                setCheckpoints((prev) => [
+                  ...prev,
+                  {
+                    name: "",
+                    normal_time: 15,
+                    pass_time: 2,
+                    card_number: "",
+                    location: { lat, lng },
+                  },
+                ]);
+                toast.success("🟢 Yangi punkt qo‘shildi");
+              }}
+            />
+          </>
+        )}
+
         {apiError && <p className="text-[red] text-2xl">{apiError}</p>}
 
+        {/* Checkpoints form */}
         {checkpoints.length > 0 && (
           <div className="mt-6 space-y-3">
             {checkpoints.map((cp, i) => (
@@ -476,21 +792,18 @@ const Objects = () => {
                   onChange={(e) => handleChange(i, "name", e.target.value)}
                   style={{ width: "25%" }}
                 />
-
                 <InputNumber
                   min={1}
                   value={cp.normal_time}
                   onChange={(val) => handleChange(i, "normal_time", val)}
                   addonAfter="min"
                 />
-
                 <InputNumber
                   min={1}
                   value={cp.pass_time}
                   onChange={(val) => handleChange(i, "pass_time", val)}
                   addonAfter="min"
                 />
-
                 <Input
                   placeholder="Card number"
                   value={cp.card_number}
@@ -499,17 +812,6 @@ const Objects = () => {
                   }
                   style={{ width: "25%" }}
                 />
-
-                {cp.id && (
-                  <Popconfirm
-                    title="Delete this checkpoint?"
-                    onConfirm={() => handleDeleteCheckpoint(cp.id)}
-                  >
-                    <Button danger size="small">
-                      Delete
-                    </Button>
-                  </Popconfirm>
-                )}
               </div>
             ))}
           </div>
@@ -517,9 +819,11 @@ const Objects = () => {
 
         <div className="mt-4 flex gap-3">
           <Button type="primary" onClick={handleUpdate}>
-            Save Changes
+            Saqlash
           </Button>
-          <Button onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
+          <Button onClick={() => setIsEditModalOpen(false)}>
+            Bekor qilish
+          </Button>
         </div>
       </Modal>
     </div>

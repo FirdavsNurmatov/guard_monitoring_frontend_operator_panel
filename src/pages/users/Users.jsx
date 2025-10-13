@@ -30,7 +30,7 @@ const Users = () => {
         setData(res.data);
         setLoading(false);
       } catch (error) {
-        toast.error("Failed to fetch users");
+        toast.error("Foydalanuvchilarni yuklashda xatolik yuz berdi");
       }
     };
     getUsers();
@@ -39,64 +39,64 @@ const Users = () => {
   const handleDelete = async (id) => {
     try {
       await instance.delete("/admin/guards/" + id);
-      toast.success("User deleted successfully");
+      toast.success("Foydalanuvchi muvaffaqiyatli o‘chirildi");
       setLoading(true);
     } catch (error) {
-      toast.error("Error deleting user");
+      toast.error("Foydalanuvchini o‘chirishda xatolik yuz berdi");
     }
   };
 
   const handleCreate = async (values) => {
     try {
       await instance.post("/admin/guards", values);
-      toast.success("User created successfully");
+      toast.success("Foydalanuvchi muvaffaqiyatli yaratildi");
       setIsFormModalOpen(false);
       form.resetFields();
       setLoading(true);
     } catch (error) {
-      toast.error("Error creating user");
+      toast.error("Foydalanuvchini yaratishda xatolik yuz berdi");
     }
   };
 
   const handleEdit = async (values) => {
     try {
       await instance.patch("/admin/guards/" + selected.id, values);
-      toast.success("User updated successfully");
+      toast.success("Foydalanuvchi ma’lumotlari yangilandi");
       setIsFormModalOpen(false);
       form.resetFields();
       setLoading(true);
     } catch (error) {
-      toast.error("Error updating user");
+      toast.error("Ma’lumotlarni yangilashda xatolik yuz berdi");
     }
   };
 
   const userColumns = [
     { title: "ID", dataIndex: "id" },
     { title: "Login", dataIndex: "login" },
-    { title: "Username", dataIndex: "username" },
-    { title: "Role", dataIndex: "role" },
+    { title: "Foydalanuvchi nomi", dataIndex: "username" },
+    { title: "Roli", dataIndex: "role" },
     {
-      title: "Status",
+      title: "Holati",
       dataIndex: "status",
       render: (status) =>
         status === "ACTIVE" ? (
-          <p className="text-green-500">{status}</p>
+          <p className="text-green-500">Faol</p>
         ) : (
-          <p className="text-red-500">{status}</p>
+          <p className="text-red-500">Nofaol</p>
         ),
     },
     {
-      title: "Created at",
+      title: "Yaratilgan sana",
       dataIndex: "createdAt",
-      render: (date) => new Date(date).toLocaleString("uz-Uz"),
+      render: (date) => new Date(date).toLocaleString("uz-UZ"),
     },
     {
-      title: "Actions",
+      title: "Amallar",
       render: (_, record) => (
         <Space>
           {record?.status === "ACTIVE" && (
             <Button danger onClick={() => handleDelete(record.id)}>
-              Delete
+              O‘chirish
             </Button>
           )}
           <Button
@@ -108,7 +108,7 @@ const Users = () => {
               setIsFormModalOpen(true);
             }}
           >
-            Edit
+            Tahrirlash
           </Button>
 
           <Button
@@ -117,13 +117,12 @@ const Users = () => {
               setIsModalOpen(true);
             }}
           >
-            More
+            Batafsil
           </Button>
         </Space>
       ),
     },
   ];
-
   return (
     <div>
       <div className="mb-4">
@@ -136,7 +135,7 @@ const Users = () => {
             setIsFormModalOpen(true);
           }}
         >
-          Create User
+          Foydalanuvchi qo‘shish
         </Button>
       </div>
 
@@ -148,43 +147,47 @@ const Users = () => {
         loading={loading}
       />
 
-      {/* More Modal */}
+      {/* Batafsil modal */}
       <Modal
         open={isModalOpen}
         onCancel={() => setIsModalOpen(false)}
         footer={null}
         width={700}
-        title="User Details"
+        title="Foydalanuvchi tafsilotlari"
       >
         {selected && (
           <Descriptions bordered column={1}>
             <Descriptions.Item label="Login">
               {selected.login}
             </Descriptions.Item>
-            <Descriptions.Item label="Username">
+            <Descriptions.Item label="Foydalanuvchi nomi">
               {selected.username}
             </Descriptions.Item>
-            <Descriptions.Item label="Role">{selected.role}</Descriptions.Item>
-            <Descriptions.Item label="Status">
+            <Descriptions.Item label="Roli">{selected.role}</Descriptions.Item>
+            <Descriptions.Item label="Holati">
               {selected.status === "ACTIVE" ? (
-                <p className="text-green-500">{selected.status}</p>
+                <p className="text-green-500">Faol</p>
               ) : (
-                <p className="text-red-500">{selected.status}</p>
+                <p className="text-red-500">Nofaol</p>
               )}
             </Descriptions.Item>
-            <Descriptions.Item label="Created at">
-              {new Date(selected.createdAt).toLocaleString("uz-Uz")}
+            <Descriptions.Item label="Yaratilgan sana">
+              {new Date(selected.createdAt).toLocaleString("uz-UZ")}
             </Descriptions.Item>
           </Descriptions>
         )}
       </Modal>
 
-      {/* Create / Edit Modal */}
+      {/* Qo‘shish / Tahrirlash modal */}
       <Modal
         open={isFormModalOpen}
         onCancel={() => setIsFormModalOpen(false)}
         footer={null}
-        title={formMode === "create" ? "Create User" : "Edit User"}
+        title={
+          formMode === "create"
+            ? "Yangi foydalanuvchi qo‘shish"
+            : "Foydalanuvchini tahrirlash"
+        }
       >
         <Form
           form={form}
@@ -196,31 +199,31 @@ const Users = () => {
           <Form.Item
             label="Login"
             name="login"
-            rules={[{ required: true, message: "Please enter login" }]}
+            rules={[{ required: true, message: "Loginni kiriting" }]}
           >
             <Input />
           </Form.Item>
-          <Form.Item label="Username" name="username">
+          <Form.Item label="Foydalanuvchi nomi" name="username">
             <Input />
           </Form.Item>
           {formMode == "create" ? (
             <>
               <Form.Item
-                label="Password"
+                label="Parol"
                 name="password"
-                rules={[{ required: true, message: "Please enter username" }]}
+                rules={[{ required: true, message: "Parolni kiriting" }]}
               >
-                <Input />
+                <Input.Password />
               </Form.Item>
               <Form.Item
-                label="Role"
+                label="Roli"
                 name="role"
-                rules={[{ required: true, message: "Please select role" }]}
+                rules={[{ required: true, message: "Rolni tanlang" }]}
               >
                 <Select
                   options={[
                     { label: "Admin", value: "ADMIN" },
-                    { label: "Guard", value: "GUARD" },
+                    { label: "Qo‘riqchi", value: "GUARD" },
                     { label: "Operator", value: "OPERATOR" },
                   ]}
                 />
@@ -229,21 +232,21 @@ const Users = () => {
           ) : (
             <>
               <Form.Item
-                label="Password"
+                label="Yangi parol"
                 name="password"
-                rules={[{ required: false }]} // edit paytida optional
+                rules={[{ required: false }]}
               >
-                <Input.Password placeholder="Leave empty to keep current password" />
+                <Input.Password placeholder="Agar o‘zgartirmoqchi bo‘lmasangiz, bo‘sh qoldiring" />
               </Form.Item>
               <Form.Item
-                label="Status"
+                label="Holati"
                 name="status"
-                rules={[{ required: true, message: "Please select status" }]}
+                rules={[{ required: true, message: "Holatni tanlang" }]}
               >
                 <Select
                   options={[
-                    { label: "Active", value: "ACTIVE" },
-                    { label: "Inactive", value: "INACTIVE" },
+                    { label: "Faol", value: "ACTIVE" },
+                    { label: "Nofaol", value: "INACTIVE" },
                   ]}
                 />
               </Form.Item>
@@ -251,7 +254,7 @@ const Users = () => {
           )}
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
-              {formMode === "create" ? "Create" : "Update"}
+              {formMode === "create" ? "Qo‘shish" : "Yangilash"}
             </Button>
           </Form.Item>
         </Form>

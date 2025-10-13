@@ -600,7 +600,7 @@ const Objects = () => {
               >
                 <div className="w-4 h-4 z-10 bg-green-500 rounded-full border-2 border-white shadow" />
                 <span className="text-xs bg-white px-1 rounded shadow">
-                  {point.name || `CP-${index + 1}`}
+                  {point.name || `${index + 1}-punkt`}
                 </span>
               </div>
             ))}
@@ -679,7 +679,7 @@ const Objects = () => {
               >
                 <div className="w-4 h-4 z-10 bg-blue-500 rounded-full border-2 border-white shadow" />
                 <span className="mt-1 text-xs bg-white px-1 rounded shadow">
-                  {point.name || `CP-${index + 1}`}
+                  {point.name || `${index + 1}-punkt`}
                 </span>
               </div>
             ))}
@@ -735,7 +735,7 @@ const Objects = () => {
               >
                 <div className="w-4 h-4 z-10 bg-red-500 rounded-full border-2 border-white shadow" />
                 <span className="mt-1 text-xs bg-white px-1 rounded shadow">
-                  {point.name || `CP-${index + 1}`}
+                  {point.name || `${index + 1}-punkt`}
                 </span>
               </div>
             ))}

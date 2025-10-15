@@ -548,20 +548,20 @@ export default function Dashboard() {
                                   color="blue"
                                   weight={4}
                                 />
-                                {/* So‘nggi nuqtani marker bilan ko‘rsatish */}
+                                {/* 🔹 So‘nggi nuqtada kichik yashil doira */}
                                 <Marker
                                   position={gpsPoints[gpsPoints.length - 1]}
-                                >
-                                  <Tooltip
-                                    direction="top"
-                                    offset={[0, -10]}
-                                    permanent
-                                  >
-                                    <div className="text-sm font-semibold text-blue-700">
-                                      So‘nggi joylashuv
-                                    </div>
-                                  </Tooltip>
-                                </Marker>
+                                  icon={L.divIcon({
+                                    className: "",
+                                    html: `<div style="
+                                      width:10px;
+                                      height:10px;
+                                      background-color:green;
+                                      border:2px solid black;
+                                      border-radius:50%;
+                                    "></div>`,
+                                  })}
+                                />
                               </>
                             )}
                           </React.Fragment>

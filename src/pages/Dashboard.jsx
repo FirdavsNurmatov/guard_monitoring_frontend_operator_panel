@@ -81,12 +81,13 @@ export default function Dashboard() {
     }
   };
 
+  // MonitoringLogs
   useEffect(() => {
     if (!journal) return; // modal yopiq bo‘lsa fetch bo‘lmaydi
 
     const fetchLogs = async () => {
       const res = await instance.get(
-        `/admin/monitoringLogs?page=${page}&limit=5`
+        `/admin/monitoringLogs?page=${page}&limit=30`
       );
       const data = res?.data?.items || [];
 
@@ -675,31 +676,31 @@ export default function Dashboard() {
             open={journal}
             onCancel={() => setJournal(false)}
             footer={null}
-            width="90vw"
+            width="80vw"
+            style={{ top: 20 }}
           >
-            <div className="gap-4">
-              <Title level={4} style={{ textAlign: "center" }}>
-                Xodimlar belgilash jurnali
-              </Title>
+            <Title level={4} style={{ textAlign: "center" }}>
+              Xodimlar belgilash jurnali
+            </Title>
 
-              <Table
-                dataSource={journalLogs.map((l, i) => ({
-                  ...l,
-                  key: i,
-                  id: (page - 1) * 5 + (i + 1), // sahifa bilan mos ID
-                }))}
-                columns={journalLogColumns}
-                pagination={{
-                  current: page,
-                  pageSize: 5,
-                  total: total,
-                  showSizeChanger: false, // <-- shu yerni qo‘ysang 5/page yo‘q bo‘ladi
-                  onChange: (p) => setPage(p),
-                  showTotal: (total) => `Jami: ${total} ta`,
-                }}
-                scroll={{ y: 400 }}
-              />
-            </div>
+            <Table
+              size="small"
+              dataSource={journalLogs.map((l, i) => ({
+                ...l,
+                key: i,
+                id: (page - 1) * 30 + (i + 1), // sahifa bilan mos ID
+              }))}
+              columns={journalLogColumns}
+              pagination={{
+                current: page,
+                pageSize: 30,
+                total: total,
+                showSizeChanger: false, // <-- shu yerni qo‘ysang 5/page yo‘q bo‘ladi
+                onChange: (p) => setPage(p),
+                showTotal: (total) => `Jami: ${total} ta`,
+              }}
+              scroll={{ y: 700 }}
+            />
           </Modal>
         </>
       )}

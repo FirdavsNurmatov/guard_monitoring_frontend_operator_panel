@@ -36,6 +36,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [guards, setGuards] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [journalLogs, setJournalLogs] = useState([]);
+  const [journal, setJournal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [showTables, setShowTables] = useState(false);
   const [now, setNow] = useState(new Date());
   const [gpsPoints, setGpsPoints] = useState([]);
@@ -77,11 +81,35 @@ export default function Dashboard() {
     }
   };
 
+  useEffect(() => {
+    if (!journal) return; // modal yopiq bo‘lsa fetch bo‘lmaydi
+
+    const fetchLogs = async () => {
+      const res = await instance.get(
+        `/admin/monitoringLogs?page=${page}&limit=5`
+      );
+      const data = res?.data?.items || [];
+
+      const formattedJournalLogs = data.map((log) => ({
+        id: log.id,
+        guard: log.user?.username || "Noma'lum",
+        checkpoint: log.checkpoint?.name || "-",
+        createdAtRaw: new Date(log.createdAt),
+        status: log.status,
+      }));
+
+      setJournalLogs(formattedJournalLogs);
+      setTotal(res?.data?.total || 0); // pagination uchun total
+    };
+
+    fetchLogs();
+  }, [journal, page]);
+
   // 🟢 Loglarni olish
   const fetchInitialLogs = async (objectId) => {
     try {
       const res = await instance.get(
-        `/admin/logs?objectId=${objectId}&limit=10`
+        `/admin/logs?objectId=${objectId}&limit=50`
       );
       const data = res?.data?.data || [];
 
@@ -250,6 +278,41 @@ export default function Dashboard() {
     { title: "Status", dataIndex: "status", key: "status" },
   ];
 
+  const journalLogColumns = [
+    {
+      title: "#",
+      dataIndex: "id",
+      key: "id",
+      width: 80,
+    },
+    { title: "Kim", dataIndex: "guard", key: "guard" },
+    { title: "Punkt nomi", dataIndex: "checkpoint", key: "checkpoint" },
+    {
+      title: "Kelgan sana",
+      dataIndex: "createdAtRaw",
+      render: (time) =>
+        new Date(time).toLocaleTimeString("uz-UZ", {
+          day: "numeric",
+          month: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      key: "createdAt",
+    },
+    {
+      title: "Xolati",
+      dataIndex: "status",
+      render: (status) =>
+        status === "ON_TIME"
+          ? "Vaqtida kelgan"
+          : status === "LATE"
+          ? "Ozgina kechikib kelgan"
+          : "Kech kelgan",
+      key: "status",
+    },
+  ];
+
   const logColumns = [
     { title: "Guard", dataIndex: "guard", key: "guard" },
     { title: "Checkpoint", dataIndex: "checkpoint", key: "checkpoint" },
@@ -299,6 +362,9 @@ export default function Dashboard() {
               </Option>
             ))}
           </Select>
+          <Button type="primary" onClick={() => setJournal(true)}>
+            Jurnal
+          </Button>
           <Button type="primary" onClick={() => setShowTables(true)}>
             Tafsilotlar
           </Button>
@@ -574,7 +640,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* MODAL */}
+          {/* Tafsilotlar Modal */}
           <Modal
             title="Tafsilotlar"
             open={showTables}
@@ -601,6 +667,38 @@ export default function Dashboard() {
                   scroll={{ y: 400 }}
                 />
               </div>
+            </div>
+          </Modal>
+
+          {/* Journal Modal */}
+          <Modal
+            open={journal}
+            onCancel={() => setJournal(false)}
+            footer={null}
+            width="90vw"
+          >
+            <div className="gap-4">
+              <Title level={4} style={{ textAlign: "center" }}>
+                Xodimlar belgilash jurnali
+              </Title>
+
+              <Table
+                dataSource={journalLogs.map((l, i) => ({
+                  ...l,
+                  key: i,
+                  id: (page - 1) * 5 + (i + 1), // sahifa bilan mos ID
+                }))}
+                columns={journalLogColumns}
+                pagination={{
+                  current: page,
+                  pageSize: 5,
+                  total: total,
+                  showSizeChanger: false, // <-- shu yerni qo‘ysang 5/page yo‘q bo‘ladi
+                  onChange: (p) => setPage(p),
+                  showTotal: (total) => `Jami: ${total} ta`,
+                }}
+                scroll={{ y: 400 }}
+              />
             </div>
           </Modal>
         </>

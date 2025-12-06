@@ -64,7 +64,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const res = await instance.get(`/admin/object/${id}`);
-      const { data } = await instance.get(`/admin/checkpoints?objectId=${id}`);
+      const { data } = await instance.get(`/admin/checkpoints`);
 
       const m = {
         ...res.data,
@@ -109,9 +109,7 @@ export default function Dashboard() {
   // 🟢 Loglarni olish
   const fetchInitialLogs = async (objectId) => {
     try {
-      const res = await instance.get(
-        `/admin/logs?objectId=${objectId}&limit=50`
-      );
+      const res = await instance.get(`/admin/logs?limit=50`);
       const data = res?.data?.data || [];
 
       const formattedLogs = data.map((log) => ({
@@ -170,9 +168,6 @@ export default function Dashboard() {
   useEffect(() => {
     // 🧠 Socketdan real-time loglarni olish (faqat bir marta)
     const handleLog = (log) => {
-      // Agar tanlangan obyekt bo‘lsa, va log shu obyektga tegishli bo‘lsa:
-      if (!selectedMap || log?.checkpoint.objectId !== selectedMap.id) return;
-
       const formattedLog = {
         id: log.id,
         guard: log.user?.username || "Noma'lum",
@@ -237,17 +232,6 @@ export default function Dashboard() {
       socket.off("logs", handleLog);
     };
   }, [selectedMap?.id]); // 🧩 faqat obyekt o‘zgarganda yangilanadi
-
-  // 🟢 selectedMap o‘zgarganda socket room’ga qo‘shiladi
-  useEffect(() => {
-    if (!selectedMap?.id) return;
-
-    socket.emit("join", selectedMap.id);
-
-    return () => {
-      socket.emit("leave", selectedMap.id);
-    };
-  }, [selectedMap?.id]);
 
   // 🛰️ GPS real-time yangilanishlar
   useEffect(() => {
@@ -349,20 +333,24 @@ export default function Dashboard() {
               minute: "2-digit",
             })}
           </span>
+          <div className="flex gap-2">
+            <Button
+              color="purple"
+              variant="solid"
+              onClick={() => handleSelectMap(maps[0]?.id)}
+            >
+              {maps[0]?.name}
+            </Button>
+            <Button
+              color="cyan"
+              variant="solid"
+              onClick={() => handleSelectMap(maps[1]?.id)}
+            >
+              {maps[1]?.name}
+            </Button>
+          </div>
         </div>
         <div className="flex gap-2 items-center">
-          <Select
-            placeholder="Obyektni tanlang"
-            style={{ width: 200 }}
-            onChange={(id) => handleSelectMap(id)}
-            value={selectedMap?.id}
-          >
-            {maps.map((m) => (
-              <Option key={m.id} value={m.id}>
-                {m.name}
-              </Option>
-            ))}
-          </Select>
           <Button type="primary" onClick={() => setJournal(true)}>
             Jurnal
           </Button>

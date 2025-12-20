@@ -181,21 +181,21 @@ export default function Dashboard() {
         yPercent: log.checkpoint?.yPercent,
       };
 
-      if (
-        formattedLog.status === "ON_TIME" ||
-        formattedLog.status === "MISSED"
-      ) {
-        // 🔊 audio va noty xabarnoma
-        const audio = new Audio("/sound-example.wav");
-        audio.play().catch(() => {});
+      // 🔊 audio va noty xabarnoma
+      const audio = new Audio("/sound-example.wav");
+      audio.play().catch(() => {});
 
-        new Noty({
-          text: `<b>${formattedLog.guard}</b> - ${formattedLog.checkpoint}`,
-          type: formattedLog.status === "ON_TIME" ? "success" : "error",
-          layout: "topRight",
-          timeout: 4000,
-        }).show();
-      }
+      new Noty({
+        text: `<b>${formattedLog.guard}</b> - ${formattedLog.checkpoint}`,
+        type:
+          formattedLog.status === "ON_TIME"
+            ? "success"
+            : formattedLog.status === "LATE"
+            ? "warning"
+            : "error",
+        layout: "topRight",
+        timeout: 4000,
+      }).show();
 
       // 🧩 logs update
       setLogs((prev) => [formattedLog, ...prev].slice(0, 50));
@@ -403,12 +403,7 @@ export default function Dashboard() {
                         (now - latestLog.createdAtRaw) / 1000
                       );
 
-                      let totalTime = 0;
-                      if (latestLog.status === "ON_TIME") {
-                        totalTime = (cp.normal_time || 0) * 60;
-                      } else if (latestLog.status === "LATE") {
-                        totalTime = (cp.pass_time || 0) * 60;
-                      }
+                      let totalTime = (cp.pass_time + cp.normal_time) * 60;
 
                       const remain = Math.max(totalTime - diffSec, 0);
 
@@ -451,6 +446,16 @@ export default function Dashboard() {
                           />
                           <div className="text-sm text-center">
                             <div>{cp.name}</div>
+                            <span className="font-sans">
+                              {latestLog?.createdAtRaw.toLocaleString("uz-UZ", {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              })}
+                            </span>
                             {latestLog && (
                               <div className="font-medium">
                                 {latestLog.guard}
@@ -525,12 +530,7 @@ export default function Dashboard() {
                             (now - latestLog.createdAtRaw) / 1000
                           );
 
-                          let totalTime = 0;
-                          if (latestLog.status === "ON_TIME") {
-                            totalTime = (cp.normal_time || 0) * 60;
-                          } else if (latestLog.status === "LATE") {
-                            totalTime = (cp.pass_time || 0) * 60;
-                          }
+                          let totalTime = (cp.normal_time + cp.pass_time) * 60;
 
                           const remain = Math.max(totalTime - diffSec, 0);
 
@@ -581,12 +581,25 @@ export default function Dashboard() {
                                 permanent
                               >
                                 <div className="text-sm text-center">
-                                  <strong>{cp.name}</strong>
+                                  <div>{cp.name}</div>
+                                  <span className="font-sans">
+                                    {latestLog?.createdAtRaw.toLocaleString(
+                                      "uz-UZ",
+                                      {
+                                        year: "numeric",
+                                        month: "2-digit",
+                                        day: "2-digit",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        hour12: false,
+                                      }
+                                    )}
+                                  </span>
                                   {latestLog && (
-                                    <>
+                                    <bold className="font-bold">
                                       <br />
                                       {latestLog.guard}
-                                    </>
+                                    </bold>
                                   )}
                                   {timeDiff && (
                                     <div className="text-blue-600 font-semibold">
